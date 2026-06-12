@@ -377,6 +377,40 @@ class VoiceCommandParser {
             ['上', { dx: 0, dy: -1 }], ['下', { dx: 0, dy: 1 }],
         ];
 
+        // ========== 形状路径模板 ==========
+        this.shapePathTemplates = [
+            {
+                keywords: ['Z字形', 'Z形', 'z字形', 'z形'],
+                name: 'Z字形',
+                directions: [
+                    { dx: 1, dy: 0 },   // 往右
+                    { dx: 0, dy: 1 },   // 往下
+                    { dx: -1, dy: 0 },  // 往左
+                    { dx: 0, dy: 1 },   // 往下
+                    { dx: 1, dy: 0 },   // 往右
+                ],
+            },
+            {
+                keywords: ['方形路径', '画个方形路径'],
+                name: '方形',
+                directions: [
+                    { dx: 1, dy: 0 },   // 往右
+                    { dx: 0, dy: 1 },   // 往下
+                    { dx: -1, dy: 0 },  // 往左
+                    { dx: 0, dy: -1 },  // 往上
+                ],
+            },
+            {
+                keywords: ['三角形路径'],
+                name: '三角形路径',
+                directions: [
+                    { dx: 1, dy: 1 },   // 往右下
+                    { dx: -1, dy: 1 },  // 往左下
+                    { dx: 0, dy: -1 },  // 往上
+                ],
+            },
+        ];
+
         // ========== 场景模板 ==========
         this.sceneTemplates = {
             snowman: {
@@ -643,6 +677,14 @@ class VoiceCommandParser {
         if (/开始画|开始绘画|自由画|画笔模式|开始自由/.test(text)) return { action: 'start_draw' };
         if (/停止画|停|暂停|不画了|结束画|结束|好了/.test(text)) return { action: 'stop_draw' };
         if (/画布上有什么|画布内容|读取画布|描述画布|上面有什么|有什么图形|有几个图形/.test(text)) return { action: 'read_canvas' };
+        if (/变整齐|排列整齐|自动排列|整齐/.test(text)) return { action: 'arrange', mode: 'grid' };
+        if (/居中排列|整体居中|居中/.test(text)) return { action: 'arrange', mode: 'center' };
+        if (/左对齐|靠左/.test(text)) return { action: 'arrange', mode: 'align_left' };
+        if (/右对齐|靠右/.test(text)) return { action: 'arrange', mode: 'align_right' };
+        if (/顶部对齐|靠上/.test(text)) return { action: 'arrange', mode: 'align_top' };
+        if (/底部对齐|靠下/.test(text)) return { action: 'arrange', mode: 'align_bottom' };
+        if (/水平分布|水平排列/.test(text)) return { action: 'arrange', mode: 'distribute_h' };
+        if (/垂直分布|垂直排列/.test(text)) return { action: 'arrange', mode: 'distribute_v' };
         return null;
     }
 
@@ -701,17 +743,90 @@ class VoiceCommandParser {
     }
 
     /**
-     * 解析方向命令
+     * 解析方向命令（支持连续方向和重复步数）
      */
     parseDirection(text) {
+        // 确保不是绘制命令的一部分（如"往左上角画一个圆"）
+        // 但允许 "字形" 路径模板（如"画一个Z字形"）
+        if (/画|绘制|来|放/.test(text) && !/字形|路径/.test(text)) return null;
+
+        // 先检查形状路径模板（Z字形、方形路径等）
+        for (const template of this.shapePathTemplates) {
+            for (const keyword of template.keywords) {
+                if (text.includes(keyword)) {
+                    return {
+                        action: 'move_sequence',
+                        directions: template.directions,
+                        steps: 1,
+                        label: template.name,
+                    };
+                }
+            }
+        }
+
+        // 尝试连续方向匹配
+        const result = this.parseContinuousDirections(text);
+        if (result && result.directions.length > 1) {
+            return {
+                action: 'move_sequence',
+                directions: result.directions,
+                steps: result.steps,
+                label: result.label,
+            };
+        }
+
+        // 单个方向
+        if (result && result.directions.length === 1) {
+            return { action: 'move', direction: result.directions[0], label: result.label };
+        }
+
+        // 回退：原始单方向匹配
         for (const [keyword, dir] of this.directionEntries) {
             if (text.includes(keyword)) {
-                // 确保不是绘制命令的一部分（如"往左上角画一个圆"）
-                if (/画|绘制|来|放/.test(text)) return null;
                 return { action: 'move', direction: dir, label: keyword };
             }
         }
         return null;
+    }
+
+    /**
+     * 从文本中提取所有连续方向指令
+     * @param {string} text - 预处理后的文本
+     * @returns {{ directions: Array<{dx, dy}>, steps: number, label: string } | null}
+     */
+    parseContinuousDirections(text) {
+        // 构建方向正则：按长度降序排列关键词，优先匹配长词
+        const sortedEntries = [...this.directionEntries].sort((a, b) => b[0].length - a[0].length);
+        const dirPattern = sortedEntries.map(([kw]) => kw).join('|');
+
+        // 匹配所有方向关键词
+        const regex = new RegExp(dirPattern, 'g');
+        const matches = text.match(regex);
+
+        if (!matches || matches.length === 0) return null;
+
+        // 将关键词转换为方向对象
+        const directions = matches.map(keyword => {
+            const entry = this.directionEntries.find(([kw]) => kw === keyword);
+            return entry ? entry[1] : null;
+        }).filter(d => d !== null);
+
+        if (directions.length === 0) return null;
+
+        // 检测 "N步" 或 "N次" 模式
+        let steps = 1;
+        const stepsMatch = text.match(/(\d+)\s*(?:步|次)/);
+        if (stepsMatch) {
+            steps = Math.min(parseInt(stepsMatch[1]), 50); // 最多50步
+        }
+
+        // 生成标签
+        const dirLabels = matches.map(keyword => keyword);
+        const label = steps > 1
+            ? `${dirLabels.join('')} ×${steps}步`
+            : dirLabels.join('');
+
+        return { directions, steps, label };
     }
 
     /**
@@ -935,6 +1050,16 @@ class VoiceCommandParser {
             case 'stop_draw': return '停止自由绘画';
             case 'help': return '帮助';
             case 'move': return `向${cmd.label}移动`;
+            case 'move_sequence': return `连续移动${cmd.directions.length}个方向`;
+            case 'arrange': {
+                const modeLabels = {
+                    grid: '整齐排列', center: '居中',
+                    align_left: '左对齐', align_right: '右对齐',
+                    align_top: '顶部对齐', align_bottom: '底部对齐',
+                    distribute_h: '水平分布', distribute_v: '垂直分布',
+                };
+                return modeLabels[cmd.mode] || '排列';
+            }
             default: return '执行命令';
         }
     }

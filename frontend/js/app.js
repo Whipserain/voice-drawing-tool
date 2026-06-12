@@ -215,6 +215,7 @@ class App {
             case 'start_draw': this.cmdStartDraw(); break;
             case 'stop_draw':  this.cmdStopDraw(); break;
             case 'move':    this.cmdMove(cmd); break;
+            case 'move_sequence': this.cmdMoveSequence(cmd); break;
             case 'color':   this.cmdColor(cmd); break;
             case 'size':    this.cmdSize(cmd); break;
             case 'undo':    this.cmdUndo(); break;
@@ -223,6 +224,7 @@ class App {
             case 'save':    this.cmdSave(); break;
             case 'help':    this.cmdHelp(); break;
             case 'read_canvas': this.cmdReadCanvas(); break;
+            case 'arrange':  this.cmdArrange(cmd); break;
             case 'unknown':
                 this.showFeedback(`未理解: "${cmd.raw}"`, 'error');
                 this.tts.speak('没听懂，请参考帮助。');
@@ -378,6 +380,19 @@ class App {
         // 方向移动不播报，避免频繁打断
     }
 
+    cmdMoveSequence(cmd) {
+        if (!this.canvas.isFreeDrawing) {
+            this.showFeedback('请先说"开始画"', 'error');
+            this.tts.speak('请先说开始画。');
+            return;
+        }
+
+        const totalSteps = cmd.directions.length * (cmd.steps || 1);
+        this.canvas.movePenSequence(cmd.directions, cmd.steps);
+        this.showFeedback(`连续移动 ${totalSteps} 步`, 'success');
+        // 不逐步播报，避免 TTS 太频繁
+    }
+
     cmdColor(cmd) {
         this.canvas.setColor(cmd.color);
         this.updateStatusBar();
@@ -485,6 +500,26 @@ class App {
 
         this.showFeedback(summary + '，' + detail, 'success');
         this.tts.speak(fullText);
+    }
+
+    cmdArrange(cmd) {
+        if (this.canvas.shapes.length === 0) {
+            this.showFeedback('画布上没有图形可排列', 'error');
+            this.tts.speak('画布上没有图形。');
+            return;
+        }
+
+        this.canvas.arrangeShapes(cmd.mode);
+
+        const modeLabels = {
+            grid: '已排列整齐', center: '已居中',
+            align_left: '已左对齐', align_right: '已右对齐',
+            align_top: '已顶部对齐', align_bottom: '已底部对齐',
+            distribute_h: '已水平分布', distribute_v: '已垂直分布',
+        };
+        const label = modeLabels[cmd.mode] || '已排列';
+        this.showFeedback(label, 'success');
+        this.tts.speak('好了。');
     }
 
     // ============================================================
