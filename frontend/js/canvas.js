@@ -19,6 +19,9 @@ class CanvasDrawingModule {
         // 形状追踪（用于删除功能）
         this.shapes = [];
 
+        // 视口状态（缩放与平移）
+        this.viewport = { scale: 1.0, offsetX: 0, offsetY: 0 };
+
         // 自由画笔状态
         this.isFreeDrawing = false;
         this.penX = 0;
@@ -494,9 +497,61 @@ class CanvasDrawingModule {
 
     clearCanvas(saveHistory = true) {
         this.shapes = [];
+        this.viewport = { scale: 1.0, offsetX: 0, offsetY: 0 };
         this.ctx.fillStyle = '#FFFFFF';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         if (saveHistory) this.saveState();
+    }
+
+    // ================================================================
+    // 视口控制（缩放与平移）
+    // ================================================================
+
+    /**
+     * 放大画布
+     */
+    zoomIn() {
+        this.viewport.scale = Math.min(3.0, this.viewport.scale + 0.25);
+        this.applyViewport();
+    }
+
+    /**
+     * 缩小画布
+     */
+    zoomOut() {
+        this.viewport.scale = Math.max(0.5, this.viewport.scale - 0.25);
+        this.applyViewport();
+    }
+
+    /**
+     * 将视口平移到指定区域，使该区域居中显示
+     * @param {string} region - 区域名称
+     */
+    panToRegion(region) {
+        const coords = this.regionToCoords(region);
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+
+        // 计算偏移量：将目标区域中心移到画布中心
+        this.viewport.offsetX = centerX - coords.x * this.viewport.scale;
+        this.viewport.offsetY = centerY - coords.y * this.viewport.scale;
+
+        this.applyViewport();
+    }
+
+    /**
+     * 重置视口到默认状态
+     */
+    resetViewport() {
+        this.viewport = { scale: 1.0, offsetX: 0, offsetY: 0 };
+        this.applyViewport();
+    }
+
+    /**
+     * 应用视口变换并重绘
+     */
+    applyViewport() {
+        this.redrawAll();
     }
 
     saveImage() {
@@ -542,12 +597,18 @@ class CanvasDrawingModule {
     }
 
     /**
-     * 重绘所有形状
+     * 重绘所有形状（应用视口变换）
      */
     redrawAll() {
+        this.ctx.save();
+
         // 清空白画布
         this.ctx.fillStyle = '#FFFFFF';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // 应用视口变换
+        this.ctx.translate(this.viewport.offsetX, this.viewport.offsetY);
+        this.ctx.scale(this.viewport.scale, this.viewport.scale);
 
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
@@ -557,6 +618,7 @@ class CanvasDrawingModule {
             this.renderShape(shape);
         }
 
+        this.ctx.restore();
         this.saveState();
     }
 
