@@ -41,11 +41,58 @@ class App {
     }
 
     init() {
+        this.registerCommands();
+        this.registerParsers();
         this.bindEvents();
         this.setupSpeechCallbacks();
         this.setupTTSCallbacks();
         this.updateStatusBar();
         this.showWelcome();
+    }
+
+    /**
+     * 注册所有命令处理器到 CommandRegistry
+     * 新增功能只需在此方法中添加一行 register 调用
+     */
+    registerCommands() {
+        const self = this;
+        CommandRegistry.register('draw',          (app, cmd) => app.cmdDraw(cmd));
+        CommandRegistry.register('scene',         (app, cmd) => app.cmdScene(cmd));
+        CommandRegistry.register('pattern',       (app, cmd) => app.cmdPattern(cmd));
+        CommandRegistry.register('text',          (app, cmd) => app.cmdText(cmd));
+        CommandRegistry.register('delete',        (app, cmd) => app.cmdDelete(cmd));
+        CommandRegistry.register('start_draw',    (app) => app.cmdStartDraw());
+        CommandRegistry.register('stop_draw',     (app) => app.cmdStopDraw());
+        CommandRegistry.register('move',          (app, cmd) => app.cmdMove(cmd));
+        CommandRegistry.register('move_sequence', (app, cmd) => app.cmdMoveSequence(cmd));
+        CommandRegistry.register('color',         (app, cmd) => app.cmdColor(cmd));
+        CommandRegistry.register('size',          (app, cmd) => app.cmdSize(cmd));
+        CommandRegistry.register('undo',          (app) => app.cmdUndo());
+        CommandRegistry.register('redo',          (app) => app.cmdRedo());
+        CommandRegistry.register('clear',         (app) => app.cmdClear());
+        CommandRegistry.register('save',          (app) => app.cmdSave());
+        CommandRegistry.register('help',          (app) => app.cmdHelp());
+        CommandRegistry.register('read_canvas',   (app) => app.cmdReadCanvas());
+        CommandRegistry.register('arrange',       (app, cmd) => app.cmdArrange(cmd));
+        CommandRegistry.register('viewport',      (app, cmd) => app.cmdViewport(cmd));
+    }
+
+    /**
+     * 注册所有解析器到 ParserRegistry
+     * 新增功能只需在此方法中添加一行 register 调用
+     */
+    registerParsers() {
+        const p = this.parser;
+        ParserRegistry.register('action',       (parser, text) => parser.parseAction(text), 10);
+        ParserRegistry.register('delete',       (parser, text) => parser.parseDeleteCommand(text), 20);
+        ParserRegistry.register('direction',    (parser, text) => parser.parseDirection(text), 30);
+        ParserRegistry.register('size',         (parser, text) => parser.parseSizeAdjust(text), 40);
+        ParserRegistry.register('color_adj',    (parser, text, cc) => parser.parseColorAdjustment(text, cc), 50);
+        ParserRegistry.register('color',        (parser, text) => parser.parseColorChange(text), 60);
+        ParserRegistry.register('pattern',      (parser, text) => parser.parsePatternCommand(text), 65);
+        ParserRegistry.register('scene',        (parser, text) => parser.parseSceneCommand(text), 70);
+        ParserRegistry.register('draw',         (parser, text) => parser.parseDrawCommand(text), 80);
+        ParserRegistry.register('text',         (parser, text) => parser.parseTextCommand(text), 90);
     }
 
     // ============================================================
@@ -206,32 +253,8 @@ class App {
 
     executeCommand(cmd) {
         if (!cmd) return;
-
-        switch (cmd.action) {
-            case 'draw':    this.cmdDraw(cmd); break;
-            case 'scene':   this.cmdScene(cmd); break;
-            case 'pattern': this.cmdPattern(cmd); break;
-            case 'text':    this.cmdText(cmd); break;
-            case 'delete':  this.cmdDelete(cmd); break;
-            case 'start_draw': this.cmdStartDraw(); break;
-            case 'stop_draw':  this.cmdStopDraw(); break;
-            case 'move':    this.cmdMove(cmd); break;
-            case 'move_sequence': this.cmdMoveSequence(cmd); break;
-            case 'color':   this.cmdColor(cmd); break;
-            case 'size':    this.cmdSize(cmd); break;
-            case 'undo':    this.cmdUndo(); break;
-            case 'redo':    this.cmdRedo(); break;
-            case 'clear':   this.cmdClear(); break;
-            case 'save':    this.cmdSave(); break;
-            case 'help':    this.cmdHelp(); break;
-            case 'read_canvas': this.cmdReadCanvas(); break;
-            case 'arrange':  this.cmdArrange(cmd); break;
-            case 'viewport': this.cmdViewport(cmd); break;
-            case 'unknown':
-                this.showFeedback(`未理解: "${cmd.raw}"`, 'error');
-                this.tts.speak('没听懂，请参考帮助。');
-                break;
-        }
+        // 使用 CommandRegistry 表驱动分发（各模块通过 registerCommand 注册）
+        CommandRegistry.execute(this, cmd);
     }
 
     // ============================================================
