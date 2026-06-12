@@ -48,6 +48,36 @@
                     <div class="pen-dot"></div>
                     <span class="pen-label">画笔位置</span>
                 </div>
+
+                <!-- 鼠标模式工具栏（仅鼠标模式激活时显示） -->
+                <div class="mouse-toolbar hidden" id="mouse-toolbar">
+                    <div class="toolbar-group">
+                        <span class="toolbar-label">画笔</span>
+                        <button class="tb-btn active" data-pen="pen" title="钢笔">✒️</button>
+                        <button class="tb-btn" data-pen="brush" title="毛笔">🖌️</button>
+                        <button class="tb-btn" data-pen="pencil" title="铅笔">✏️</button>
+                        <button class="tb-btn" data-pen="watercolor" title="水彩笔">🎨</button>
+                        <button class="tb-btn" data-pen="crayon" title="蜡笔">🖍️</button>
+                        <button class="tb-btn" data-pen="marker" title="马克笔">🖊️</button>
+                    </div>
+                    <div class="toolbar-group">
+                        <span class="toolbar-label">颜色</span>
+                        <button class="tb-color active" data-color="#000000" style="background:#000000" title="黑"></button>
+                        <button class="tb-color" data-color="#FF0000" style="background:#FF0000" title="红"></button>
+                        <button class="tb-color" data-color="#00AA00" style="background:#00AA00" title="绿"></button>
+                        <button class="tb-color" data-color="#0000FF" style="background:#0000FF" title="蓝"></button>
+                        <button class="tb-color" data-color="#FFD700" style="background:#FFD700" title="黄"></button>
+                        <button class="tb-color" data-color="#FF69B4" style="background:#FF69B4" title="粉"></button>
+                        <button class="tb-color" data-color="#FFA500" style="background:#FFA500" title="橙"></button>
+                        <button class="tb-color" data-color="#800080" style="background:#800080" title="紫"></button>
+                        <input type="color" id="tb-custom-color" class="tb-custom-color" value="#000000" title="自定义">
+                    </div>
+                    <div class="toolbar-group">
+                        <span class="toolbar-label">粗细</span>
+                        <input type="range" id="tb-brush-size" min="1" max="30" value="3" class="tb-slider">
+                        <span id="tb-size-display" class="tb-size-val">3</span>
+                    </div>
+                </div>
             </div>
 
             <!-- 命令帮助面板（可折叠） -->

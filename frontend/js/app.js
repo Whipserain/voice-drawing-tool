@@ -36,6 +36,10 @@ class App {
             statusSize: document.getElementById('status-size'),
             statusPenType: document.getElementById('status-pen-type'),
             btnMouseToggle: document.getElementById('btn-mouse-toggle'),
+            mouseToolbar: document.getElementById('mouse-toolbar'),
+            tbBrushSize: document.getElementById('tb-brush-size'),
+            tbSizeDisplay: document.getElementById('tb-size-display'),
+            tbCustomColor: document.getElementById('tb-custom-color'),
             helpToggle: document.getElementById('btn-help-toggle'),
             penIndicator: document.getElementById('pen-indicator'),
             helpPanel: document.getElementById('help-panel'),
@@ -91,6 +95,7 @@ class App {
         CommandRegistry.register('connect',      (app, cmd) => app.cmdConnect(cmd));
         CommandRegistry.register('background',   (app, cmd) => app.cmdBackground(cmd));
         CommandRegistry.register('copy',         (app, cmd) => app.cmdCopy(cmd));
+        CommandRegistry.register('move_shape',   (app, cmd) => app.cmdMoveShape(cmd));
         CommandRegistry.register('tutorial',     (app, cmd) => app.cmdTutorial(cmd));
     }
 
@@ -113,6 +118,7 @@ class App {
         ParserRegistry.register('connect',      (parser, text) => parser.parseConnectCommand(text), 67);
         ParserRegistry.register('complex',      (parser, text) => parser.parseComplexCommand(text), 68);
         ParserRegistry.register('copy',         (parser, text) => parser.parseCopyCommand(text), 69);
+        ParserRegistry.register('move_shape',   (parser, text) => parser.parseMoveShapeCommand(text), 69);
         ParserRegistry.register('scene',        (parser, text) => parser.parseSceneCommand(text), 70);
         ParserRegistry.register('draw',         (parser, text) => parser.parseDrawCommand(text), 80);
         ParserRegistry.register('text',         (parser, text) => parser.parseTextCommand(text), 90);
@@ -160,6 +166,47 @@ class App {
         this.el.helpClose.addEventListener('click', () => this.toggleHelp());
         if (this.el.btnMouseToggle) {
             this.el.btnMouseToggle.addEventListener('click', () => this.cmdToggleMouse());
+        }
+
+        // 鼠标工具栏事件
+        this._bindMouseToolbar();
+    }
+
+    _bindMouseToolbar() {
+        // 画笔类型按钮
+        document.querySelectorAll('.tb-btn[data-pen]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tb-btn[data-pen]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.canvas.setPenType(btn.dataset.pen);
+            });
+        });
+
+        // 颜色按钮
+        document.querySelectorAll('.tb-color[data-color]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tb-color').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.canvas.setColor(btn.dataset.color);
+                if (this.el.tbCustomColor) this.el.tbCustomColor.value = btn.dataset.color;
+            });
+        });
+
+        // 自定义颜色
+        if (this.el.tbCustomColor) {
+            this.el.tbCustomColor.addEventListener('input', (e) => {
+                this.canvas.setColor(e.target.value);
+                document.querySelectorAll('.tb-color').forEach(b => b.classList.remove('active'));
+            });
+        }
+
+        // 画笔粗细
+        if (this.el.tbBrushSize) {
+            this.el.tbBrushSize.addEventListener('input', (e) => {
+                const size = parseInt(e.target.value);
+                this.canvas.setBrushSize(size);
+                if (this.el.tbSizeDisplay) this.el.tbSizeDisplay.textContent = size;
+            });
         }
     }
 
@@ -529,14 +576,16 @@ class App {
             this.canvas.disableMouse();
             this.el.btnMouseToggle.classList.remove('active');
             this.el.btnMouseToggle.textContent = '🖱️ 鼠标绘画: 关';
+            if (this.el.mouseToolbar) this.el.mouseToolbar.classList.add('hidden');
             this.showFeedback('鼠标绘画已关闭', 'info');
-            this.tts.speak('鼠标绘画已关闭，恢复语音控制。');
+            this.tts.speak('鼠标绘画已关闭。');
         } else {
             this.canvas.enableMouse();
             this.el.btnMouseToggle.classList.add('active');
             this.el.btnMouseToggle.textContent = '🖱️ 鼠标绘画: 开';
+            if (this.el.mouseToolbar) this.el.mouseToolbar.classList.remove('hidden');
             this.showFeedback('鼠标绘画已开启', 'success');
-            this.tts.speak('鼠标绘画已开启，可以直接在画布上绘画。');
+            this.tts.speak('鼠标绘画已开启，可用工具栏选择画笔和颜色。');
         }
     }
 
@@ -637,6 +686,50 @@ class App {
 
         this.showFeedback('已复制图形', 'success');
         this.tts.speak('好的，已复制了一个。');
+    }
+
+    /**
+     * 移动形状到新位置
+     */
+    cmdMoveShape(cmd) {
+        const props = {
+            shape: cmd.shape,
+            color: cmd.color,
+        };
+
+        const source = this.canvas.findShapeByProperties(props);
+
+        if (!source) {
+            this.showFeedback('没有找到可移动的图形', 'error');
+            this.tts.speak('没有找到符合条件的图形。');
+            return;
+        }
+
+        if (source.type === 'freepath' || source.type === 'pattern') {
+            this.showFeedback('该类型图形暂不支持移动', 'error');
+            this.tts.speak('这种类型的图形暂时不能移动。');
+            return;
+        }
+
+        // 计算目标坐标
+        const targetCoords = this.canvas.regionToCoords(cmd.toRegion);
+        const oldCx = source.cx;
+        const oldCy = source.cy;
+
+        // 移动形状
+        source.cx = targetCoords.x + (source.offsetX || 0);
+        source.cy = targetCoords.y + (source.offsetY || 0);
+
+        // 如果有 offsetX/offsetY，需要调整
+        if (source.offsetX) source.cx = targetCoords.x + source.offsetX;
+        if (source.offsetY) source.cy = targetCoords.y + source.offsetY;
+
+        // 重绘画布
+        this.canvas.redrawAll();
+
+        const regionName = this.canvas.getRegionLabel(cmd.toRegion);
+        this.showFeedback(`已移动到${regionName}`, 'success');
+        this.tts.speak(`好的，已移到${regionName}。`);
     }
 
     /**
