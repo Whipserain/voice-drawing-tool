@@ -293,7 +293,231 @@ const SCENE_TEMPLATES = {
             { shape: 'circle', region: 'center', color: '#FFA500', size: 12, offsetX: 10, offsetY: 8, fill: true },
         ],
     },
+    // ===== 新增场景模板 =====
+    disk: {
+        name: '圆盘',
+        keywords: ['圆盘', '盘子', '碟子', '飞盘'],
+        shapes: [
+            { shape: 'circle', region: 'center', color: '#C0C0C0', size: 120, fill: true },
+            { shape: 'circle', region: 'center', color: '#A0A0A0', size: 100, fill: true },
+            { shape: 'circle', region: 'center', color: '#D0D0D0', size: 60, fill: true },
+        ],
+    },
+    ring: {
+        name: '圆环',
+        keywords: ['圆环', '环形', '光环', '呼啦圈'],
+        shapes: [
+            { shape: 'circle', region: 'center', color: '#4169E1', size: 120 },
+            { shape: 'circle', region: 'center', color: '#FFFFFF', size: 100, fill: true },
+        ],
+    },
+    thickRing: {
+        name: '粗圆环',
+        keywords: ['粗圆环', '粗环', '厚环', '甜甜圈', '面包圈'],
+        shapes: [
+            { shape: 'circle', region: 'center', color: '#FF69B4', size: 120, fill: true },
+            { shape: 'circle', region: 'center', color: '#FFFFFF', size: 60, fill: true },
+            { shape: 'circle', region: 'center', color: '#FF1493', size: 110 },
+        ],
+    },
+    airplane: {
+        name: '飞机',
+        keywords: ['飞机', '客机', '航班', 'plane', 'airplane'],
+        shapes: [
+            { shape: 'ellipse', region: 'center', color: '#E0E0E0', size: 140, fill: true },
+            { shape: 'ellipse', region: 'center', color: '#B0B0B0', size: 40, offsetX: 60, fill: true },
+            { shape: 'rect', region: 'center', color: '#D0D0D0', size: 80, offsetY: -50, fill: true },
+            { shape: 'triangle', region: 'center', color: '#C0C0C0', size: 30, offsetX: -60, offsetY: -10 },
+            { shape: 'rect', region: 'center', color: '#4169E1', size: 15, offsetX: 50, fill: true },
+            { shape: 'rect', region: 'center', color: '#4169E1', size: 15, offsetX: 30, fill: true },
+        ],
+    },
+    car: {
+        name: '汽车',
+        keywords: ['汽车', '小汽车', '轿车', 'car'],
+        shapes: [
+            { shape: 'rect', region: 'center', color: '#FF0000', size: 140, offsetY: 10, fill: true },
+            { shape: 'rect', region: 'center', color: '#CC0000', size: 80, offsetY: -20, fill: true },
+            { shape: 'rect', region: 'center', color: '#87CEEB', size: 25, offsetX: -25, offsetY: -20, fill: true },
+            { shape: 'rect', region: 'center', color: '#87CEEB', size: 25, offsetX: 25, offsetY: -20, fill: true },
+            { shape: 'circle', region: 'center', color: '#333333', size: 30, offsetX: -40, offsetY: 30, fill: true },
+            { shape: 'circle', region: 'center', color: '#333333', size: 30, offsetX: 40, offsetY: 30, fill: true },
+            { shape: 'circle', region: 'center', color: '#666666', size: 16, offsetX: -40, offsetY: 30, fill: true },
+            { shape: 'circle', region: 'center', color: '#666666', size: 16, offsetX: 40, offsetY: 30, fill: true },
+            { shape: 'rect', region: 'center', color: '#FFD700', size: 10, offsetX: -65, fill: true },
+            { shape: 'rect', region: 'center', color: '#FF0000', size: 10, offsetX: 65, fill: true },
+        ],
+    },
+    toyCar: {
+        name: '玩具车',
+        keywords: ['玩具车', '小车', '赛车', '卡通车'],
+        shapes: [
+            { shape: 'rect', region: 'center', color: '#FFD700', size: 100, offsetY: 10, fill: true },
+            { shape: 'rect', region: 'center', color: '#FFA500', size: 60, offsetY: -15, fill: true },
+            { shape: 'circle', region: 'center', color: '#333333', size: 24, offsetX: -30, offsetY: 25, fill: true },
+            { shape: 'circle', region: 'center', color: '#333333', size: 24, offsetX: 30, offsetY: 25, fill: true },
+            { shape: 'circle', region: 'center', color: '#FF0000', size: 12, offsetX: -50, fill: true },
+            { shape: 'circle', region: 'center', color: '#FFFFFF', size: 20, offsetX: 15, offsetY: -15, fill: true },
+        ],
+    },
+    toy: {
+        name: '玩具',
+        keywords: ['玩具', '积木', '玩偶'],
+        shapes: [
+            { shape: 'rect', region: 'center', color: '#FF0000', size: 40, offsetX: -30, offsetY: 20, fill: true },
+            { shape: 'rect', region: 'center', color: '#00AA00', size: 40, offsetX: 30, offsetY: 20, fill: true },
+            { shape: 'rect', region: 'center', color: '#0000FF', size: 40, offsetY: -20, fill: true },
+            { shape: 'circle', region: 'center', color: '#FFD700', size: 30, offsetX: -30, offsetY: -20, fill: true },
+            { shape: 'triangle', region: 'center', color: '#FF69B4', size: 35, offsetX: 30, offsetY: -20 },
+        ],
+    },
+    dog: {
+        name: '小狗',
+        keywords: ['小狗', '狗', '狗狗', 'dog'],
+        shapes: [
+            { shape: 'circle', region: 'center', color: '#DEB887', size: 100, fill: true },
+            { shape: 'circle', region: 'center', color: '#DEB887', size: 50, offsetX: -50, offsetY: -50, fill: true },
+            { shape: 'circle', region: 'center', color: '#DEB887', size: 50, offsetX: 50, offsetY: -50, fill: true },
+            { shape: 'circle', region: 'center', color: '#333333', size: 15, offsetX: -20, offsetY: -10, fill: true },
+            { shape: 'circle', region: 'center', color: '#333333', size: 15, offsetX: 20, offsetY: -10, fill: true },
+            { shape: 'circle', region: 'center', color: '#333333', size: 20, offsetY: 10, fill: true },
+            { shape: 'circle', region: 'center', color: '#FF69B4', size: 12, offsetY: 20, fill: true },
+        ],
+    },
+    bird: {
+        name: '小鸟',
+        keywords: ['小鸟', '鸟', 'bird'],
+        shapes: [
+            { shape: 'ellipse', region: 'center', color: '#4169E1', size: 80, fill: true },
+            { shape: 'circle', region: 'center', color: '#FF0000', size: 40, offsetX: 40, offsetY: -20, fill: true },
+            { shape: 'circle', region: 'center', color: '#FFFFFF', size: 15, offsetX: 48, offsetY: -25, fill: true },
+            { shape: 'circle', region: 'center', color: '#000000', size: 8, offsetX: 50, offsetY: -25, fill: true },
+            { shape: 'triangle', region: 'center', color: '#FFD700', size: 20, offsetX: 60, offsetY: -15 },
+            { shape: 'triangle', region: 'center', color: '#4169E1', size: 30, offsetX: -20, offsetY: -30 },
+            { shape: 'triangle', region: 'center', color: '#4169E1', size: 30, offsetX: -20, offsetY: 30 },
+        ],
+    },
+    fish: {
+        name: '鱼',
+        keywords: ['鱼', '小鱼', '金鱼', 'fish'],
+        shapes: [
+            { shape: 'ellipse', region: 'center', color: '#FFA500', size: 100, fill: true },
+            { shape: 'triangle', region: 'center', color: '#FF8C00', size: 40, offsetX: -60 },
+            { shape: 'circle', region: 'center', color: '#FFFFFF', size: 15, offsetX: 30, offsetY: -10, fill: true },
+            { shape: 'circle', region: 'center', color: '#000000', size: 8, offsetX: 33, offsetY: -10, fill: true },
+        ],
+    },
+    butterfly: {
+        name: '蝴蝶',
+        keywords: ['蝴蝶', 'butterfly'],
+        shapes: [
+            { shape: 'ellipse', region: 'center', color: '#FF69B4', size: 60, offsetX: -40, offsetY: -20, fill: true },
+            { shape: 'ellipse', region: 'center', color: '#FF69B4', size: 60, offsetX: 40, offsetY: -20, fill: true },
+            { shape: 'ellipse', region: 'center', color: '#FF1493', size: 40, offsetX: -35, offsetY: 20, fill: true },
+            { shape: 'ellipse', region: 'center', color: '#FF1493', size: 40, offsetX: 35, offsetY: 20, fill: true },
+            { shape: 'rect', region: 'center', color: '#333333', size: 8, fill: true },
+            { shape: 'hline', region: 'center', color: '#333333', size: 20, offsetX: -20, offsetY: -40 },
+            { shape: 'hline', region: 'center', color: '#333333', size: 20, offsetX: 20, offsetY: -40 },
+        ],
+    },
+    moon: {
+        name: '月亮',
+        keywords: ['月亮', '弯月', '月牙', 'moon'],
+        shapes: [
+            { shape: 'circle', region: 'center', color: '#FFD700', size: 100, fill: true },
+            { shape: 'circle', region: 'center', color: '#0a0a2e', size: 85, offsetX: 25, offsetY: -20, fill: true },
+        ],
+    },
+    tree: {
+        name: '树',
+        keywords: ['树', '大树', '松树', 'tree'],
+        shapes: [
+            { shape: 'rect', region: 'center', color: '#8B4513', size: 30, offsetY: 50, fill: true },
+            { shape: 'triangle', region: 'center', color: '#228B22', size: 80, offsetY: -10 },
+            { shape: 'triangle', region: 'center', color: '#2E8B57', size: 60, offsetY: -40 },
+            { shape: 'triangle', region: 'center', color: '#3CB371', size: 40, offsetY: -65 },
+        ],
+    },
+    flower2: {
+        name: '花朵',
+        keywords: ['花朵', '鲜花', 'flower'],
+        shapes: [
+            { shape: 'circle', region: 'center', color: '#FF0000', size: 25, offsetX: 0, offsetY: -25, fill: true },
+            { shape: 'circle', region: 'center', color: '#FF0000', size: 25, offsetX: 22, offsetY: -8, fill: true },
+            { shape: 'circle', region: 'center', color: '#FF0000', size: 25, offsetX: 14, offsetY: 18, fill: true },
+            { shape: 'circle', region: 'center', color: '#FF0000', size: 25, offsetX: -14, offsetY: 18, fill: true },
+            { shape: 'circle', region: 'center', color: '#FF0000', size: 25, offsetX: -22, offsetY: -8, fill: true },
+            { shape: 'circle', region: 'center', color: '#FFD700', size: 18, fill: true },
+            { shape: 'vline', region: 'center', color: '#228B22', size: 40, offsetY: 40 },
+            { shape: 'ellipse', region: 'center', color: '#228B22', size: 20, offsetX: -15, offsetY: 40, fill: true },
+        ],
+    },
+    house2: {
+        name: '城堡',
+        keywords: ['城堡', '宫殿', 'castle'],
+        shapes: [
+            { shape: 'rect', region: 'center', color: '#A0A0A0', size: 120, offsetY: 20, fill: true },
+            { shape: 'rect', region: 'center', color: '#808080', size: 25, offsetX: -50, offsetY: -20, fill: true },
+            { shape: 'rect', region: 'center', color: '#808080', size: 25, offsetX: 0, offsetY: -30, fill: true },
+            { shape: 'rect', region: 'center', color: '#808080', size: 25, offsetX: 50, offsetY: -20, fill: true },
+            { shape: 'rect', region: 'center', color: '#606060', size: 15, offsetX: -50, offsetY: -35, fill: true },
+            { shape: 'rect', region: 'center', color: '#606060', size: 15, offsetX: 0, offsetY: -45, fill: true },
+            { shape: 'rect', region: 'center', color: '#606060', size: 15, offsetX: 50, offsetY: -35, fill: true },
+            { shape: 'rect', region: 'center', color: '#8B4513', size: 30, offsetY: 50, fill: true },
+            { shape: 'rect', region: 'center', color: '#87CEEB', size: 20, offsetX: -30, offsetY: 10, fill: true },
+            { shape: 'rect', region: 'center', color: '#87CEEB', size: 20, offsetX: 30, offsetY: 10, fill: true },
+        ],
+    },
 };
+
+// ============================================================
+// 更多口语化同义词映射（扩展识别范围）
+// ============================================================
+
+const COLLOQUIAL_SYNONYMS = {
+    // 形状的口语化表达
+    '圈子': 'circle', '圈圈': 'circle', '饼': 'circle', '盘': 'circle',
+    '球': 'circle', '蛋': 'circle', '硬币': 'circle', '瓶盖': 'circle',
+    '方块': 'rect', '方': 'rect', '盒子': 'rect', '窗户': 'rect',
+    '门': 'rect', '桌子': 'rect', '书': 'rect', '手机': 'rect',
+    '三角': 'triangle', '山': 'triangle', '屋顶': 'triangle',
+    '星星': 'star', '五角星': 'star',
+    '爱心': 'heart', '心': 'heart', '红心': 'heart',
+    '箭': 'arrow', '箭头': 'arrow',
+    '杠': 'line', '道': 'line', '横杠': 'hline', '竖杠': 'vline',
+
+    // 颜色的口语化表达
+    '大红': '#FF0000', '鲜红': '#FF0000', '血红': '#8B0000',
+    '天蓝': '#87CEEB', '海蓝': '#006994', '深蓝': '#00008B',
+    '草绿': '#7CFC00', '翠绿': '#00AA00', '墨绿': '#006400',
+    '柠檬黄': '#FFD700', '土黄': '#DAA520', '米黄': '#F5DEB3',
+    '粉红': '#FF69B4', '桃红': '#FF69B4', '玫红': '#FF007F',
+    '紫色': '#800080', '淡紫': '#DDA0DD', '深紫': '#4B0082',
+    '咖啡色': '#6F4E37', '巧克力': '#D2691E', '栗色': '#800000',
+    '银色': '#C0C0C0', '银灰': '#C0C0C0',
+    '金色': '#FFD700', '黄金': '#FFD700',
+
+    // 位置的口语化表达
+    '上头': 'top', '下头': 'bottom', '左边': 'left', '右边': 'right',
+    '当中': 'center', '正中': 'center', '正中间': 'center',
+    '偏左': 'center-left', '偏右': 'center-right',
+    '靠左': 'left', '靠右': 'right', '靠上': 'top', '靠下': 'bottom',
+
+    // 操作的口语化表达
+    '不要了': 'undo', '算了': 'undo', '撤回': 'undo',
+    '清掉': 'clear', '全删': 'clear', '重新来': 'clear',
+    '存下来': 'save', '下载': 'save', '导出': 'save',
+};
+
+// ============================================================
+// 纠错命令词汇
+// ============================================================
+
+const ERROR_CORRECTION_WORDS = [
+    '不对', '不是这个', '不是这个意思', '错了', '画错了',
+    '搞错了', '弄错了', '重来', '不是那样', '不对不对',
+    '取消', '算了算了', '不要这个', '删掉重来',
+];
 
 
 // ============================================================
