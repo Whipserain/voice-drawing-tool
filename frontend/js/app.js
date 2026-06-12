@@ -310,6 +310,35 @@ class App {
         if (cmd.color) this.canvas.setColor(cmd.color);
         if (cmd.size) this.canvas.setShapeSize(cmd.size);
 
+        // 相对定位：基于最后画的形状计算位置
+        if (cmd.relativeTo === 'last') {
+            const lastShape = this.canvas.shapes[this.canvas.shapes.length - 1];
+            if (lastShape) {
+                const offset = size || 60;
+                const dirMap = {
+                    '左边': { x: -offset, y: 0 }, '右边': { x: offset, y: 0 },
+                    '上面': { x: 0, y: -offset }, '下面': { x: 0, y: offset },
+                    '左上': { x: -offset, y: -offset }, '右上': { x: offset, y: -offset },
+                    '左下': { x: -offset, y: offset }, '右下': { x: offset, y: offset },
+                };
+                const d = dirMap[cmd.relativeDir] || { x: offset, y: 0 };
+                const newCx = lastShape.cx + d.x;
+                const newCy = lastShape.cy + d.y;
+                // 直接在计算出的坐标绘制
+                this.canvas.ctx.save();
+                this.canvas.applyPenStyle(this.canvas.ctx, color, this.canvas.brushSize);
+                this.canvas.ctx.fillStyle = color;
+                this.canvas.drawShapeAtRegion(cmd.shape, 'center', color, size,
+                    newCx - this.canvas.regionToCoords('center').x,
+                    newCy - this.canvas.regionToCoords('center').y);
+                this.canvas.ctx.restore();
+                const regionName = `刚才那个${cmd.relativeDir}`;
+                this.showFeedback(`${this.getColorName(color)}${this.getShapeName(cmd.shape)} → ${regionName}`, 'success');
+                this.tts.speak(`好的，已在${regionName}画好了。`);
+                return;
+            }
+        }
+
         // 线条：起点到终点
         if (cmd.shape === 'line' && cmd.startRegion && cmd.endRegion) {
             this.canvas.drawLineBetweenRegions(cmd.startRegion, cmd.endRegion, color, size);

@@ -446,10 +446,10 @@ class CanvasDrawingModule {
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
                 break;
-            case 'pencil': // 铅笔：较细，灰色调
-                ctx.strokeStyle = '#555555';
+            case 'pencil': // 铅笔：较细，稍浅
+                ctx.strokeStyle = c;
                 ctx.lineWidth = Math.max(1, w * 0.6);
-                ctx.globalAlpha = 0.7;
+                ctx.globalAlpha = 0.6;
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
                 break;
@@ -553,6 +553,109 @@ class CanvasDrawingModule {
                 this.movePen(dir);
             }
         }
+    }
+
+    // ================================================================
+    // 鼠标/触摸绘画
+    // ================================================================
+
+    enableMouse() {
+        this.mouseEnabled = true;
+        this.isMouseDrawing = false;
+        this.mousePoints = [];
+
+        this._onMouseDown = (e) => this._handleMouseDown(e);
+        this._onMouseMove = (e) => this._handleMouseMove(e);
+        this._onMouseUp = () => this._handleMouseUp();
+        this._onTouchStart = (e) => { e.preventDefault(); this._handleMouseDown(e.touches[0]); };
+        this._onTouchMove = (e) => { e.preventDefault(); this._handleMouseMove(e.touches[0]); };
+        this._onTouchEnd = () => this._handleMouseUp();
+
+        this.canvas.addEventListener('mousedown', this._onMouseDown);
+        this.canvas.addEventListener('mousemove', this._onMouseMove);
+        this.canvas.addEventListener('mouseup', this._onMouseUp);
+        this.canvas.addEventListener('touchstart', this._onTouchStart, { passive: false });
+        this.canvas.addEventListener('touchmove', this._onTouchMove, { passive: false });
+        this.canvas.addEventListener('touchend', this._onTouchEnd);
+
+        const area = this.canvas.closest('.canvas-area');
+        if (area) area.classList.add('mouse-active');
+    }
+
+    disableMouse() {
+        this.mouseEnabled = false;
+        this.isMouseDrawing = false;
+        this.mousePoints = [];
+
+        this.canvas.removeEventListener('mousedown', this._onMouseDown);
+        this.canvas.removeEventListener('mousemove', this._onMouseMove);
+        this.canvas.removeEventListener('mouseup', this._onMouseUp);
+        this.canvas.removeEventListener('touchstart', this._onTouchStart);
+        this.canvas.removeEventListener('touchmove', this._onTouchMove);
+        this.canvas.removeEventListener('touchend', this._onTouchEnd);
+
+        const area = this.canvas.closest('.canvas-area');
+        if (area) area.classList.remove('mouse-active');
+    }
+
+    _getCanvasCoords(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        return {
+            x: (e.clientX - rect.left) * (this.canvas.width / rect.width),
+            y: (e.clientY - rect.top) * (this.canvas.height / rect.height)
+        };
+    }
+
+    _handleMouseDown(e) {
+        this.isMouseDrawing = true;
+        const pos = this._getCanvasCoords(e);
+        this.mousePoints = [pos];
+
+        this.ctx.save();
+        this.applyPenStyle(this.ctx);
+        this.ctx.beginPath();
+        this.ctx.moveTo(pos.x, pos.y);
+    }
+
+    _handleMouseMove(e) {
+        if (!this.isMouseDrawing) return;
+        const pos = this._getCanvasCoords(e);
+        this.mousePoints.push(pos);
+
+        if (this.penType === 'crayon') {
+            for (let i = 0; i < 3; i++) {
+                const ox = (Math.random() - 0.5) * this.brushSize * 0.4;
+                const oy = (Math.random() - 0.5) * this.brushSize * 0.4;
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.mousePoints[this.mousePoints.length - 2].x + ox,
+                                 this.mousePoints[this.mousePoints.length - 2].y + oy);
+                this.ctx.lineTo(pos.x + ox, pos.y + oy);
+                this.ctx.stroke();
+            }
+        } else {
+            this.ctx.lineTo(pos.x, pos.y);
+            this.ctx.stroke();
+            this.ctx.beginPath();
+            this.ctx.moveTo(pos.x, pos.y);
+        }
+    }
+
+    _handleMouseUp() {
+        if (!this.isMouseDrawing) return;
+        this.isMouseDrawing = false;
+        this.ctx.restore();
+
+        if (this.mousePoints.length > 1) {
+            this.shapes.push({
+                type: 'freepath',
+                color: this.currentColor,
+                lineWidth: this.brushSize,
+                penType: this.penType,
+                points: [...this.mousePoints],
+            });
+            this.saveState();
+        }
+        this.mousePoints = [];
     }
 
     // ================================================================
@@ -837,6 +940,22 @@ class CanvasDrawingModule {
                 this.ctx.textAlign = 'center';
                 this.ctx.textBaseline = 'middle';
                 this.ctx.fillText(shape.content, shape.cx, shape.cy);
+                break;
+            case 'freepath':
+                if (shape.points && shape.points.length > 1) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(shape.points[0].x, shape.points[0].y);
+                    for (let i = 1; i < shape.points.length; i++) {
+                        if (i < shape.points.length - 1) {
+                            const mx = (shape.points[i].x + shape.points[i + 1].x) / 2;
+                            const my = (shape.points[i].y + shape.points[i + 1].y) / 2;
+                            this.ctx.quadraticCurveTo(shape.points[i].x, shape.points[i].y, mx, my);
+                        } else {
+                            this.ctx.lineTo(shape.points[i].x, shape.points[i].y);
+                        }
+                    }
+                    this.ctx.stroke();
+                }
                 break;
             case 'pattern':
                 this.ctx.restore(); // 恢复后再单独处理图案
