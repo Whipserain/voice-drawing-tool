@@ -479,6 +479,7 @@ class VoiceCommandParser {
 
         // 优先级从高到低
         return this.parseAction(text)
+            || this.parseDeleteCommand(text)
             || this.parseDirection(text)
             || this.parseSizeAdjust(text)
             || this.parseColorChange(text)
@@ -499,6 +500,60 @@ class VoiceCommandParser {
         if (/开始画|开始绘画|自由画|画笔模式|开始自由/.test(text)) return { action: 'start_draw' };
         if (/停止画|停|暂停|不画了|结束画|结束|好了/.test(text)) return { action: 'stop_draw' };
         return null;
+    }
+
+    /**
+     * 解析删除命令
+     * 支持："删除那个红色圆圈"、"删除中间的红色圆圈"、"删除刚刚的红色圆圈"、"删除最后画的"
+     */
+    parseDeleteCommand(text) {
+        if (!/删除|去掉|移除|擦掉|不要了|撤掉/.test(text)) return null;
+
+        // "删除最后(画的)" → 删除最近一个形状
+        if (/最后|最近|刚才|刚刚/.test(text) && !this.findShape(text)) {
+            return { action: 'delete', matchType: 'last' };
+        }
+
+        // 提取颜色、形状、位置
+        const colorResult = this.findColor(text);
+        const shapeResult = this.findShape(text);
+        const region = this.findRegion(text);
+
+        // 有形状关键词 → 按属性匹配删除
+        if (shapeResult) {
+            return {
+                action: 'delete',
+                matchType: 'byProperty',
+                shape: shapeResult.shape,
+                color: colorResult ? colorResult.color : null,
+                region: region,
+            };
+        }
+
+        // 只有颜色 → 按颜色删除
+        if (colorResult) {
+            return {
+                action: 'delete',
+                matchType: 'byProperty',
+                shape: null,
+                color: colorResult.color,
+                region: region,
+            };
+        }
+
+        // 只有位置 → 按位置删除
+        if (region) {
+            return {
+                action: 'delete',
+                matchType: 'byProperty',
+                shape: null,
+                color: null,
+                region: region,
+            };
+        }
+
+        // 无具体属性 → 删除最后一个
+        return { action: 'delete', matchType: 'last' };
     }
 
     /**
