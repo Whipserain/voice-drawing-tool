@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>纯语音绘图工具</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 顶部状态栏 -->
+        <header class="header">
+            <div class="header-left">
+                <h1>🎨 纯语音绘图工具</h1>
+            </div>
+            <div class="header-right">
+                <div class="status-group">
+                    <span class="status-label">当前工具</span>
+                    <span class="status-value" id="status-tool">画笔</span>
+                </div>
+                <div class="status-group">
+                    <span class="status-label">颜色</span>
+                    <span class="status-dot" id="status-color-dot" style="background:#000000"></span>
+                    <span class="status-value" id="status-color">黑色</span>
+                </div>
+                <div class="status-group">
+                    <span class="status-label">大小</span>
+                    <span class="status-value" id="status-size">3</span>
+                </div>
+                <button class="help-toggle" id="btn-help-toggle" title="语音指令帮助">
+                    ❓
+                </button>
+            </div>
+        </header>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 画布区域 -->
+            <div class="canvas-area">
+                <canvas id="drawing-canvas"></canvas>
+
+                <!-- 画笔位置指示器（自由画模式） -->
+                <div class="pen-indicator hidden" id="pen-indicator">
+                    <div class="pen-dot"></div>
+                    <span class="pen-label">画笔位置</span>
+                </div>
+            </div>
+
+            <!-- 命令帮助面板（可折叠） -->
+            <aside class="help-panel hidden" id="help-panel">
+                <div class="help-header">
+                    <h3>🎤 语音指令指南</h3>
+                    <button class="help-close" id="btn-help-close">✕</button>
+                </div>
+                <div class="help-content">
+                    <div class="help-section">
+                        <h4>🖌️ 绘制图形</h4>
+                        <div class="help-examples">
+                            <code>画一个红色圆形在中间</code>
+                            <code>画一个大的蓝色矩形在左上角</code>
+                            <code>画一条线从左上到右下</code>
+                            <code>画一个三角形在右边</code>
+                            <code>画三个黄色星星在上面</code>
+                            <code>画一个绿色爱心在中间</code>
+                        </div>
+                    </div>
+                    <div class="help-section">
+                        <h4>✏️ 自由画笔</h4>
+                        <div class="help-examples">
+                            <code>开始画</code>
+                            <code>往上</code> <code>往左</code> <code>往右下</code>
+                            <code>停止画</code>
+                        </div>
+                    </div>
+                    <div class="help-section">
+                        <h4>🎨 颜色和大小</h4>
+                        <div class="help-examples">
+                            <code>红色</code> <code>蓝色</code> <code>绿色</code>
+                            <code>大一点</code> <code>小一点</code> <code>大小30</code>
+                        </div>
+                    </div>
+                    <div class="help-section">
+                        <h4>📝 文字标注</h4>
+                        <div class="help-examples">
+                            <code>写上你好在中间</code>
+                            <code>标注生日快乐在上面</code>
+                        </div>
+                    </div>
+                    <div class="help-section">
+                        <h4>⚡ 操作命令</h4>
+                        <div class="help-examples">
+                            <code>撤销</code> <code>重做</code>
+                            <code>清除</code> <code>保存</code>
+                            <code>帮助</code>
+                        </div>
+                    </div>
+                    <div class="help-section">
+                        <h4>📍 位置说明</h4>
+                        <div class="position-map">
+                            <div class="pos-grid">
+                                <span class="pos-cell">左上</span>
+                                <span class="pos-cell">上面</span>
+                                <span class="pos-cell">右上</span>
+                                <span class="pos-cell">左边</span>
+                                <span class="pos-cell active">中间</span>
+                                <span class="pos-cell">右边</span>
+                                <span class="pos-cell">左下</span>
+                                <span class="pos-cell">下面</span>
+                                <span class="pos-cell">右下</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- 底部语音控制栏 -->
+        <footer class="voice-bar">
+            <button class="voice-btn" id="btn-voice">
+                <span class="voice-icon">🎤</span>
+                <span class="voice-label">点击开启语音</span>
+            </button>
+
+            <div class="voice-info">
+                <div class="voice-status-row">
+                    <span class="voice-status" id="voice-status">未开始</span>
+                    <div class="voice-wave hidden" id="voice-wave">
+                        <span></span><span></span><span></span><span></span><span></span>
+                    </div>
+                </div>
+                <div class="voice-transcript" id="voice-transcript">
+                    等待语音指令...
+                </div>
+            </div>
+
+            <div class="voice-feedback" id="voice-feedback">
+                <!-- 命令执行反馈会动态插入这里 -->
+            </div>
+        </footer>
+    </div>
+
+    <!-- 脚本 -->
+    <script src="js/speech.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
