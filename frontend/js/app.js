@@ -19,6 +19,13 @@ class App {
         // 应用状态
         this.isListening = false;
         this.showHelp = false;
+        this.cooldownTimer = null;
+        this.ttsPausedAt = 0;
+        this.silentUntil = 0;
+        this.SILENT_DURATION = 500;
+        this.echoWords = ['画好了', '好了', '删掉了', '撤销了', '重做了', '清除了', '已保存',
+            '已切换', '已开启', '已关闭', '已停止', '已绘制', '写好了',
+            '变大', '变小', '没有听清', '没有听懂', '没有找到', '画布上没有'];
 
         // DOM 元素
         this.el = {
@@ -26,6 +33,8 @@ class App {
             statusColorDot: document.getElementById('status-color-dot'),
             statusColor: document.getElementById('status-color'),
             statusSize: document.getElementById('status-size'),
+            statusPenType: document.getElementById('status-pen-type'),
+            btnMouseToggle: document.getElementById('btn-mouse-toggle'),
             helpToggle: document.getElementById('btn-help-toggle'),
             penIndicator: document.getElementById('pen-indicator'),
             helpPanel: document.getElementById('help-panel'),
@@ -75,6 +84,9 @@ class App {
         CommandRegistry.register('read_canvas',   (app) => app.cmdReadCanvas());
         CommandRegistry.register('arrange',       (app, cmd) => app.cmdArrange(cmd));
         CommandRegistry.register('viewport',      (app, cmd) => app.cmdViewport(cmd));
+        CommandRegistry.register('pen_type',     (app, cmd) => app.cmdPenType(cmd));
+        CommandRegistry.register('toggle_mouse',  (app) => app.cmdToggleMouse());
+        CommandRegistry.register('complex',      (app, cmd) => app.cmdComplex(cmd));
     }
 
     /**
@@ -86,10 +98,13 @@ class App {
         ParserRegistry.register('action',       (parser, text) => parser.parseAction(text), 10);
         ParserRegistry.register('delete',       (parser, text) => parser.parseDeleteCommand(text), 20);
         ParserRegistry.register('direction',    (parser, text) => parser.parseDirection(text), 30);
+        ParserRegistry.register('pen_type',     (parser, text) => parser.parsePenTypeCommand(text), 35);
         ParserRegistry.register('size',         (parser, text) => parser.parseSizeAdjust(text), 40);
         ParserRegistry.register('color_adj',    (parser, text, cc) => parser.parseColorAdjustment(text, cc), 50);
+        ParserRegistry.register('color_rgb',    (parser, text) => parser.parseRGBColorCommand(text), 55);
         ParserRegistry.register('color',        (parser, text) => parser.parseColorChange(text), 60);
         ParserRegistry.register('pattern',      (parser, text) => parser.parsePatternCommand(text), 65);
+        ParserRegistry.register('complex',      (parser, text) => parser.parseComplexCommand(text), 68);
         ParserRegistry.register('scene',        (parser, text) => parser.parseSceneCommand(text), 70);
         ParserRegistry.register('draw',         (parser, text) => parser.parseDrawCommand(text), 80);
         ParserRegistry.register('text',         (parser, text) => parser.parseTextCommand(text), 90);
@@ -135,6 +150,9 @@ class App {
         this.el.btnVoice.addEventListener('click', () => this.toggleListening());
         this.el.helpToggle.addEventListener('click', () => this.toggleHelp());
         this.el.helpClose.addEventListener('click', () => this.toggleHelp());
+        if (this.el.btnMouseToggle) {
+            this.el.btnMouseToggle.addEventListener('click', () => this.cmdToggleMouse());
+        }
     }
 
     // ============================================================
@@ -143,19 +161,23 @@ class App {
 
     setupTTSCallbacks() {
         this.tts.onSpeakStart = () => {
-            // TTS 开始播报 → 暂停语音识别，防止回声
+            this.ttsPausedAt = Date.now();
+            if (this.cooldownTimer) clearTimeout(this.cooldownTimer);
             this.speech.pause();
             this.el.voiceStatus.textContent = '🔊 播报中（暂停聆听）';
             this.el.voiceWave.classList.add('hidden');
         };
 
         this.tts.onSpeakEnd = () => {
-            // TTS 播报结束 → 恢复语音识别
-            this.speech.resume();
-            if (this.speech.shouldBeListening) {
-                this.el.voiceStatus.textContent = '正在聆听';
-                this.el.voiceWave.classList.remove('hidden');
-            }
+            this.ttsPausedAt = Date.now();
+            // 延迟恢复识别，等待 TTS 尾音消散
+            this.cooldownTimer = setTimeout(() => {
+                this.speech.resume();
+                if (this.speech.shouldBeListening) {
+                    this.el.voiceStatus.textContent = '正在聆听';
+                    this.el.voiceWave.classList.remove('hidden');
+                }
+            }, this.speech.ttsCooldown || 800);
         };
     }
 
@@ -237,6 +259,23 @@ class App {
     processVoiceInput(text) {
         if (!text || text.trim().length === 0) return;
 
+        const now = Date.now();
+
+        // 静默期检查：命令执行后的短时间内忽略所有识别结果
+        if (now < this.silentUntil) {
+            console.log('静默期内忽略:', text);
+            return;
+        }
+
+        // TTS 回声检查：在 TTS 冷却期内过滤回声词汇
+        if (this.ttsPausedAt && (now - this.ttsPausedAt) < 2000) {
+            const isEcho = this.echoWords.some(word => text.includes(word));
+            if (isEcho) {
+                console.log('忽略 TTS 回声:', text);
+                return;
+            }
+        }
+
         const commands = this.parser.parse(text, this.canvas.currentColor);
 
         if (commands.length === 0) {
@@ -249,6 +288,9 @@ class App {
             this.executeCommand(cmd);
             this.history.push(cmd);
         }
+
+        // 命令执行后设置静默期，防止 TTS 播报被识别为新命令
+        this.silentUntil = Date.now() + this.SILENT_DURATION;
     }
 
     executeCommand(cmd) {
@@ -440,6 +482,53 @@ class App {
         this.tts.speak(`${colorName}。`);
     }
 
+    cmdPenType(cmd) {
+        this.canvas.setPenType(cmd.type);
+        this.updateStatusBar();
+        this.showFeedback(`画笔: ${cmd.label}`, 'success');
+        this.tts.speak(`已切换为${cmd.label}。`);
+    }
+
+    /**
+     * 切换鼠标绘画模式
+     */
+    cmdToggleMouse() {
+        if (this.canvas.mouseEnabled) {
+            this.canvas.disableMouse();
+            this.el.btnMouseToggle.classList.remove('active');
+            this.el.btnMouseToggle.textContent = '🖱️ 鼠标绘画: 关';
+            this.showFeedback('鼠标绘画已关闭', 'info');
+            this.tts.speak('鼠标绘画已关闭，恢复语音控制。');
+        } else {
+            this.canvas.enableMouse();
+            this.el.btnMouseToggle.classList.add('active');
+            this.el.btnMouseToggle.textContent = '🖱️ 鼠标绘画: 开';
+            this.showFeedback('鼠标绘画已开启', 'success');
+            this.tts.speak('鼠标绘画已开启，可以直接在画布上绘画。');
+        }
+    }
+
+    /**
+     * 处理复杂对话命令
+     */
+    cmdComplex(cmd) {
+        if (cmd.mode === 'pattern') {
+            const size = cmd.size || this.canvas.shapeSize;
+            const region = cmd.region || 'center';
+            this.canvas.drawPattern(cmd.shape, region, cmd.colors, size, cmd.segments);
+            const regionName = this.canvas.getRegionLabel(region);
+            this.showFeedback(`${cmd.label} → ${regionName}`, 'success');
+            this.tts.speak(`好的，${regionName}的${cmd.label}画好了。`);
+        } else if (cmd.mode === 'ring') {
+            const color = cmd.color || this.canvas.currentColor;
+            const size = cmd.size || 80;
+            this.canvas.drawShapeAtRegion(cmd.shape, cmd.region, color, size);
+            const regionName = this.canvas.getRegionLabel(cmd.region);
+            this.showFeedback(`${cmd.label} → ${regionName}`, 'success');
+            this.tts.speak(`好的，${regionName}的${cmd.label}画好了。`);
+        }
+    }
+
     cmdSize(cmd) {
         let newSize;
         let desc;
@@ -602,6 +691,16 @@ class App {
         this.el.statusColorDot.style.background = this.canvas.currentColor;
 
         this.el.statusSize.textContent = this.canvas.shapeSize;
+
+        // 画笔类型
+        const penTypeNames = {
+            'brush': '毛笔', 'pen': '钢笔', 'pencil': '铅笔',
+            'watercolor': '水彩笔', 'crayon': '蜡笔', 'marker': '马克笔',
+            'chalk': '粉笔', 'oil': '油画笔',
+        };
+        if (this.el.statusPenType) {
+            this.el.statusPenType.textContent = penTypeNames[this.canvas.penType] || '钢笔';
+        }
     }
 
     toggleHelp() {

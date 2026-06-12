@@ -15,6 +15,7 @@ class CanvasDrawingModule {
         this.currentColor = '#000000';
         this.brushSize = 3;
         this.shapeSize = 60; // 形状默认大小
+        this.penType = 'pen'; // 画笔类型：brush/pen/pencil/watercolor/crayon/marker/chalk/oil
 
         // 形状追踪（用于删除功能）
         this.shapes = [];
@@ -159,12 +160,12 @@ class CanvasDrawingModule {
             offsetX: offsetX || 0, offsetY: offsetY || 0,
             lineWidth: this.brushSize,
             fill: shouldFill,
+            penType: this.penType,
         });
 
         this.ctx.save();
-        this.ctx.strokeStyle = c;
+        this.applyPenStyle(this.ctx, c, this.brushSize);
         this.ctx.fillStyle = c;
-        this.ctx.lineWidth = this.brushSize;
 
         switch (shape) {
             case 'circle':
@@ -421,6 +422,82 @@ class CanvasDrawingModule {
     }
 
     /**
+     * 根据画笔类型设置 ctx 绘图属性
+     * @param {CanvasRenderingContext2D} ctx - 绘图上下文
+     * @param {string} [color] - 颜色覆盖
+     * @param {number} [lineWidth] - 线宽覆盖
+     */
+    applyPenStyle(ctx, color, lineWidth) {
+        const c = color || this.currentColor;
+        const w = lineWidth || this.brushSize;
+
+        switch (this.penType) {
+            case 'brush': // 毛笔：较宽，透明度稍低
+                ctx.strokeStyle = c;
+                ctx.lineWidth = w * 1.5;
+                ctx.globalAlpha = 0.85;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                break;
+            case 'pen': // 钢笔：均匀线条，默认
+                ctx.strokeStyle = c;
+                ctx.lineWidth = w;
+                ctx.globalAlpha = 1.0;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                break;
+            case 'pencil': // 铅笔：较细，灰色调
+                ctx.strokeStyle = '#555555';
+                ctx.lineWidth = Math.max(1, w * 0.6);
+                ctx.globalAlpha = 0.7;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                break;
+            case 'watercolor': // 水彩笔：半透明，较宽
+                ctx.strokeStyle = c;
+                ctx.lineWidth = w * 2;
+                ctx.globalAlpha = 0.4;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                break;
+            case 'crayon': // 蜡笔：不规则边缘（多次叠加细线模拟）
+                ctx.strokeStyle = c;
+                ctx.lineWidth = w;
+                ctx.globalAlpha = 0.8;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                break;
+            case 'marker': // 马克笔：宽线条，半透明
+                ctx.strokeStyle = c;
+                ctx.lineWidth = w * 2.5;
+                ctx.globalAlpha = 0.5;
+                ctx.lineCap = 'butt';
+                ctx.lineJoin = 'miter';
+                break;
+            case 'chalk': // 粉笔：较宽，半透明
+                ctx.strokeStyle = c;
+                ctx.lineWidth = w * 1.8;
+                ctx.globalAlpha = 0.6;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                break;
+            case 'oil': // 油画笔：宽线条，不透明
+                ctx.strokeStyle = c;
+                ctx.lineWidth = w * 2;
+                ctx.globalAlpha = 1.0;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                break;
+            default:
+                ctx.strokeStyle = c;
+                ctx.lineWidth = w;
+                ctx.globalAlpha = 1.0;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+        }
+    }
+
+    /**
      * 在自由画笔模式下向指定方向移动并绘制
      * @param {{dx: number, dy: number}} direction - 方向
      * @param {number} distance - 移动距离
@@ -436,12 +513,27 @@ class CanvasDrawingModule {
         const clampedX = Math.max(0, Math.min(this.canvas.width, newX));
         const clampedY = Math.max(0, Math.min(this.canvas.height, newY));
 
-        this.ctx.strokeStyle = this.currentColor;
-        this.ctx.lineWidth = this.brushSize;
-        this.ctx.beginPath();
-        this.ctx.moveTo(this.penX, this.penY);
-        this.ctx.lineTo(clampedX, clampedY);
-        this.ctx.stroke();
+        this.ctx.save();
+        this.applyPenStyle(this.ctx);
+
+        if (this.penType === 'crayon') {
+            // 蜡笔效果：多次叠加细线模拟不规则边缘
+            for (let i = 0; i < 3; i++) {
+                const offsetX = (Math.random() - 0.5) * this.brushSize * 0.4;
+                const offsetY = (Math.random() - 0.5) * this.brushSize * 0.4;
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.penX + offsetX, this.penY + offsetY);
+                this.ctx.lineTo(clampedX + offsetX, clampedY + offsetY);
+                this.ctx.stroke();
+            }
+        } else {
+            this.ctx.beginPath();
+            this.ctx.moveTo(this.penX, this.penY);
+            this.ctx.lineTo(clampedX, clampedY);
+            this.ctx.stroke();
+        }
+
+        this.ctx.restore();
 
         this.penX = clampedX;
         this.penY = clampedY;
@@ -504,6 +596,10 @@ class CanvasDrawingModule {
 
     setBrushSize(size) {
         this.brushSize = Math.max(1, Math.min(50, size));
+    }
+
+    setPenType(type) {
+        this.penType = type;
     }
 
     setShapeSize(size) {
@@ -697,9 +793,12 @@ class CanvasDrawingModule {
      */
     renderShape(shape) {
         this.ctx.save();
-        this.ctx.strokeStyle = shape.color;
+        // 使用形状记录的画笔类型（如有），否则用当前画笔类型
+        const savedPenType = this.penType;
+        if (shape.penType) this.penType = shape.penType;
+        this.applyPenStyle(this.ctx, shape.color, shape.lineWidth || this.brushSize);
+        this.penType = savedPenType;
         this.ctx.fillStyle = shape.color;
-        this.ctx.lineWidth = shape.lineWidth || this.brushSize;
         const fill = shape.fill || false;
 
         switch (shape.type) {

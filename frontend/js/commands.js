@@ -77,6 +77,13 @@ const COMMAND_CONFIG = {
         ['左', 'left'], ['右', 'right'],
     ],
 
+    // 画笔类型映射（按长度降序）
+    penTypeEntries: [
+        ['油画笔', 'oil'], ['水彩笔', 'watercolor'], ['马克笔', 'marker'],
+        ['粉笔', 'chalk'], ['蜡笔', 'crayon'], ['毛笔', 'brush'],
+        ['铅笔', 'pencil'], ['钢笔', 'pen'],
+    ],
+
     // 大小映射
     sizeEntries: [
         ['不大不小', 40], ['很小', 10], ['特小', 10], ['极小', 10],
