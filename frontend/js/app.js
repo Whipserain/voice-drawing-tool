@@ -19,6 +19,7 @@ class App {
         // 应用状态
         this.isListening = false;
         this.showHelp = false;
+        this.tutorialStep = -1; // -1 = not in tutorial mode
         this.cooldownTimer = null;
         this.ttsPausedAt = 0;
         this.silentUntil = 0;
@@ -76,7 +77,7 @@ class App {
         CommandRegistry.register('move_sequence', (app, cmd) => app.cmdMoveSequence(cmd));
         CommandRegistry.register('color',         (app, cmd) => app.cmdColor(cmd));
         CommandRegistry.register('size',          (app, cmd) => app.cmdSize(cmd));
-        CommandRegistry.register('undo',          (app) => app.cmdUndo());
+        CommandRegistry.register('undo',          (app, cmd) => app.cmdUndo(cmd));
         CommandRegistry.register('redo',          (app) => app.cmdRedo());
         CommandRegistry.register('clear',         (app) => app.cmdClear());
         CommandRegistry.register('save',          (app) => app.cmdSave());
@@ -87,6 +88,10 @@ class App {
         CommandRegistry.register('pen_type',     (app, cmd) => app.cmdPenType(cmd));
         CommandRegistry.register('toggle_mouse',  (app) => app.cmdToggleMouse());
         CommandRegistry.register('complex',      (app, cmd) => app.cmdComplex(cmd));
+        CommandRegistry.register('connect',      (app, cmd) => app.cmdConnect(cmd));
+        CommandRegistry.register('background',   (app, cmd) => app.cmdBackground(cmd));
+        CommandRegistry.register('copy',         (app, cmd) => app.cmdCopy(cmd));
+        CommandRegistry.register('tutorial',     (app, cmd) => app.cmdTutorial(cmd));
     }
 
     /**
@@ -103,8 +108,11 @@ class App {
         ParserRegistry.register('color_adj',    (parser, text, cc) => parser.parseColorAdjustment(text, cc), 50);
         ParserRegistry.register('color_rgb',    (parser, text) => parser.parseRGBColorCommand(text), 55);
         ParserRegistry.register('color',        (parser, text) => parser.parseColorChange(text), 60);
+        ParserRegistry.register('background',   (parser, text) => parser.parseBackgroundCommand(text), 62);
         ParserRegistry.register('pattern',      (parser, text) => parser.parsePatternCommand(text), 65);
+        ParserRegistry.register('connect',      (parser, text) => parser.parseConnectCommand(text), 67);
         ParserRegistry.register('complex',      (parser, text) => parser.parseComplexCommand(text), 68);
+        ParserRegistry.register('copy',         (parser, text) => parser.parseCopyCommand(text), 69);
         ParserRegistry.register('scene',        (parser, text) => parser.parseSceneCommand(text), 70);
         ParserRegistry.register('draw',         (parser, text) => parser.parseDrawCommand(text), 80);
         ParserRegistry.register('text',         (parser, text) => parser.parseTextCommand(text), 90);
@@ -324,14 +332,9 @@ class App {
                 const d = dirMap[cmd.relativeDir] || { x: offset, y: 0 };
                 const newCx = lastShape.cx + d.x;
                 const newCy = lastShape.cy + d.y;
-                // 直接在计算出的坐标绘制
-                this.canvas.ctx.save();
-                this.canvas.applyPenStyle(this.canvas.ctx, color, this.canvas.brushSize);
-                this.canvas.ctx.fillStyle = color;
                 this.canvas.drawShapeAtRegion(cmd.shape, 'center', color, size,
                     newCx - this.canvas.regionToCoords('center').x,
                     newCy - this.canvas.regionToCoords('center').y);
-                this.canvas.ctx.restore();
                 const regionName = `刚才那个${cmd.relativeDir}`;
                 this.showFeedback(`${this.getColorName(color)}${this.getShapeName(cmd.shape)} → ${regionName}`, 'success');
                 this.tts.speak(`好的，已在${regionName}画好了。`);
@@ -558,6 +561,125 @@ class App {
         }
     }
 
+    /**
+     * 连接两个形状
+     */
+    cmdConnect(cmd) {
+        const fromShape = this.canvas.findShapeByProperties(cmd.from);
+        const toShape = this.canvas.findShapeByProperties(cmd.to);
+
+        if (!fromShape || !toShape) {
+            this.showFeedback('未找到要连接的图形', 'error');
+            this.tts.speak('没有找到符合条件的图形，请检查描述。');
+            return;
+        }
+
+        if (fromShape === toShape) {
+            this.showFeedback('不能连接同一个图形', 'error');
+            this.tts.speak('这两个是同一个图形，无法连接。');
+            return;
+        }
+
+        const color = this.canvas.currentColor;
+        this.canvas.drawLineBetweenShapes(fromShape, toShape, color);
+        this.showFeedback('已连接两个图形', 'success');
+        this.tts.speak('好的，已经连起来了。');
+    }
+
+    /**
+     * 设置画布背景颜色
+     */
+    cmdBackground(cmd) {
+        this.canvas.setBackgroundColor(cmd.color);
+        const colorName = cmd.label || this.getColorName(cmd.color);
+        this.showFeedback(`背景已设为${colorName}`, 'success');
+        this.tts.speak(`好的，已换成${colorName}背景。`);
+    }
+
+    /**
+     * 复制形状
+     */
+    cmdCopy(cmd) {
+        const props = {
+            shape: cmd.shape,
+            color: cmd.color,
+            region: cmd.region,
+        };
+
+        // 如果没有指定任何属性，复制最后一个形状
+        const source = this.canvas.findShapeByProperties(props);
+
+        if (!source) {
+            this.showFeedback('没有找到可复制的图形', 'error');
+            this.tts.speak('没有找到符合条件的图形。');
+            return;
+        }
+
+        // 在原位置附近偏移一点
+        const offset = 30;
+        if (source.type === 'freepath' || source.type === 'pattern') {
+            this.showFeedback('该类型图形暂不支持复制', 'error');
+            this.tts.speak('这种类型的图形暂时不能复制。');
+            return;
+        }
+
+        const newCx = source.cx + offset;
+        const newCy = source.cy + offset;
+        const region = source.region || 'center';
+        const baseCoords = this.canvas.regionToCoords(region);
+
+        this.canvas.drawShapeAtRegion(
+            source.type, region, source.color, source.size,
+            newCx - baseCoords.x,
+            newCy - baseCoords.y,
+            source.fill
+        );
+
+        this.showFeedback('已复制图形', 'success');
+        this.tts.speak('好的，已复制了一个。');
+    }
+
+    /**
+     * 教程模式
+     */
+    cmdTutorial(cmd) {
+        const mode = cmd.mode;
+
+        if (mode === 'exit') {
+            this.tutorialStep = -1;
+            this.showFeedback('已退出教程', 'info');
+            this.tts.speak('教程结束啦，随时可以说教程重新开始。');
+            return;
+        }
+
+        if (mode === 'start') {
+            this.tutorialStep = 0;
+        } else if (mode === 'next') {
+            if (this.tutorialStep < 0) {
+                this.showFeedback('请先说"教程"开始', 'error');
+                this.tts.speak('请先说教程来开始学习。');
+                return;
+            }
+            this.tutorialStep++;
+        }
+
+        const steps = [
+            '第1步，基本形状。你可以说：画一个红色圆形，画一个蓝色矩形，画一个五角星。试试看吧！',
+            '第2步，颜色和大小。你可以说：画一个大一点的绿色三角形，换成黄色，画个很小的紫色圆。说下一步继续。',
+            '第3步，高级功能。你可以说：撤销，清除画布，保存图片，把红色圆和蓝色方连起来，复制那个圆，换成黑色背景。说退出教程结束。',
+        ];
+
+        if (this.tutorialStep >= steps.length) {
+            this.tutorialStep = -1;
+            this.showFeedback('教程完成！', 'success');
+            this.tts.speak('恭喜你完成教程！现在可以自由创作了。');
+            return;
+        }
+
+        this.showFeedback(`教程 第${this.tutorialStep + 1}/${steps.length}步`, 'info');
+        this.tts.speak(steps[this.tutorialStep]);
+    }
+
     cmdSize(cmd) {
         let newSize;
         let desc;
@@ -581,10 +703,20 @@ class App {
         this.tts.speak(`好的，${desc}。`);
     }
 
-    cmdUndo() {
-        if (this.canvas.undo()) {
-            this.showFeedback('已撤销', 'success');
-            this.tts.speak('撤销了。');
+    cmdUndo(cmd) {
+        const steps = (cmd && cmd.steps) || 1;
+        let undone = 0;
+        for (let i = 0; i < steps; i++) {
+            if (this.canvas.undo()) {
+                undone++;
+            } else {
+                break;
+            }
+        }
+        if (undone > 0) {
+            const desc = undone > 1 ? `已撤销${undone}步` : '已撤销';
+            this.showFeedback(desc, 'success');
+            this.tts.speak(desc + '。');
         } else {
             this.showFeedback('无法撤销', 'error');
             this.tts.speak('没有可撤销的了。');
