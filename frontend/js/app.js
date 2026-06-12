@@ -190,7 +190,7 @@ class App {
     processVoiceInput(text) {
         if (!text || text.trim().length === 0) return;
 
-        const commands = this.parser.parse(text);
+        const commands = this.parser.parse(text, this.canvas.currentColor);
 
         if (commands.length === 0) {
             this.showFeedback('未识别到有效指令', 'error');
@@ -225,6 +225,7 @@ class App {
             case 'help':    this.cmdHelp(); break;
             case 'read_canvas': this.cmdReadCanvas(); break;
             case 'arrange':  this.cmdArrange(cmd); break;
+            case 'viewport': this.cmdViewport(cmd); break;
             case 'unknown':
                 this.showFeedback(`未理解: "${cmd.raw}"`, 'error');
                 this.tts.speak('没听懂，请参考帮助。');
@@ -520,6 +521,32 @@ class App {
         const label = modeLabels[cmd.mode] || '已排列';
         this.showFeedback(label, 'success');
         this.tts.speak('好了。');
+    }
+
+    cmdViewport(cmd) {
+        switch (cmd.mode) {
+            case 'zoom_in':
+                this.canvas.zoomIn();
+                this.showFeedback(`放大 (${Math.round(this.canvas.viewport.scale * 100)}%)`, 'success');
+                this.tts.speak('放大');
+                break;
+            case 'zoom_out':
+                this.canvas.zoomOut();
+                this.showFeedback(`缩小 (${Math.round(this.canvas.viewport.scale * 100)}%)`, 'success');
+                this.tts.speak('缩小');
+                break;
+            case 'reset':
+                this.canvas.resetViewport();
+                this.showFeedback('已复原', 'success');
+                this.tts.speak('已复原');
+                break;
+            case 'pan':
+                this.canvas.panToRegion(cmd.region);
+                const regionName = this.canvas.getRegionLabel(cmd.region);
+                this.showFeedback(`查看${regionName}`, 'success');
+                this.tts.speak(`看${regionName}`);
+                break;
+        }
     }
 
     // ============================================================
