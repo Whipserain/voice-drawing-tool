@@ -576,6 +576,47 @@ body {
 }
 
 /* ============================================================
+   鼠标绘画模式
+   ============================================================ */
+
+/* 鼠标模式开关按钮 */
+.mouse-toggle-btn {
+    padding: 8px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #aaa;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.mouse-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    transform: scale(1.03);
+}
+
+.mouse-toggle-btn.active {
+    background: linear-gradient(135deg, #00d2ff 0%, #7b68ee 100%);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 0 20px rgba(0, 210, 255, 0.3);
+}
+
+/* 鼠标模式激活时画布边框高亮 */
+.canvas-area.mouse-active {
+    border: 2px solid rgba(0, 210, 255, 0.6);
+    box-shadow: 0 0 30px rgba(0, 210, 255, 0.2), inset 0 0 30px rgba(0, 210, 255, 0.05);
+}
+
+.canvas-area.mouse-active #drawing-canvas {
+    cursor: crosshair;
+}
+
+/* ============================================================
    响应式布局
    ============================================================ */
 @media (max-width: 768px) {

@@ -24,6 +24,13 @@ class SpeechRecognitionModule {
         this.onInterim = null;
         this.restartTimer = null;
 
+        // TTS 冷却期
+        this.ttsCooldown = 800;
+        this.ttsCooldownTimer = null;
+
+        // 智能句子边界检测
+        this.lastFinalTime = 0;
+
         // 防重复：记录最近处理的命令文本和时间
         this.lastProcessedText = '';
         this.lastProcessedTime = 0;
@@ -72,13 +79,23 @@ class SpeechRecognitionModule {
 
             if (finalTranscript && this.onResult) {
                 const text = finalTranscript.trim();
+                const now = Date.now();
+
+                // 智能句子边界检测：500ms 内的连续 final 结果可能是 TTS 回声
+                if (this.lastFinalTime > 0 && (now - this.lastFinalTime) < 500) {
+                    console.log('忽略快速连续结果（可能回声）:', text);
+                    this.lastFinalTime = now;
+                    return;
+                }
+                this.lastFinalTime = now;
+
                 // 防重复检查
                 if (this.isDuplicate(text)) {
                     console.log('忽略重复命令:', text);
                     return;
                 }
                 this.lastProcessedText = text;
-                this.lastProcessedTime = Date.now();
+                this.lastProcessedTime = now;
                 this.onResult(text);
             }
         };
@@ -107,16 +124,36 @@ class SpeechRecognitionModule {
      */
     isDuplicate(text) {
         const now = Date.now();
-        // 完全相同且在阈值内
-        if (text === this.lastProcessedText && (now - this.lastProcessedTime) < this.duplicateThreshold) {
-            return true;
-        }
-        // 去除语气词后相同（如"画一个圆"和"画一个圆吧"）
+        if ((now - this.lastProcessedTime) > this.duplicateThreshold) return false;
+        // 完全相同
+        if (text === this.lastProcessedText) return true;
+        // 去除语气词后相同
         const clean = s => s.replace(/[吧啊呢哦嗯呀哈了的]/g, '');
-        if (clean(text) === clean(this.lastProcessedText) && (now - this.lastProcessedTime) < this.duplicateThreshold) {
-            return true;
-        }
+        if (clean(text) === clean(this.lastProcessedText)) return true;
+        // 编辑距离 <= 2 视为重复（处理 ASR 微小差异）
+        if (this.editDistance(text, this.lastProcessedText) <= 2) return true;
         return false;
+    }
+
+    /**
+     * 计算两个字符串的编辑距离（Levenshtein Distance）
+     */
+    editDistance(a, b) {
+        if (!a || !b) return Math.max(a?.length || 0, b?.length || 0);
+        const m = a.length, n = b.length;
+        const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+        for (let i = 0; i <= m; i++) dp[i][0] = i;
+        for (let j = 0; j <= n; j++) dp[0][j] = j;
+        for (let i = 1; i <= m; i++) {
+            for (let j = 1; j <= n; j++) {
+                dp[i][j] = Math.min(
+                    dp[i - 1][j] + 1,
+                    dp[i][j - 1] + 1,
+                    dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+                );
+            }
+        }
+        return dp[m][n];
     }
 
     tryRestart() {
@@ -150,9 +187,13 @@ class SpeechRecognitionModule {
      */
     resume() {
         this.isPaused = false;
-        if (this.shouldBeListening && !this.isListening) {
-            this.tryRestart();
-        }
+        if (this.ttsCooldownTimer) clearTimeout(this.ttsCooldownTimer);
+        // TTS 结束后等待 ttsCooldown 再恢复识别，防止尾音被拾取
+        this.ttsCooldownTimer = setTimeout(() => {
+            if (this.shouldBeListening && !this.isListening) {
+                this.tryRestart();
+            }
+        }, this.ttsCooldown);
     }
 
     start() {
@@ -293,6 +334,7 @@ class VoiceCommandParser {
         this.sizeEntries = cfg.sizeEntries || [];
         this.directionEntries = cfg.directionEntries || [];
         this.shapePathTemplates = cfg.shapePathTemplates || [];
+        this.penTypeEntries = cfg.penTypeEntries || [];
         this.fillerWords = cfg.fillerWords || [];
         this.sceneTemplates = window.SCENE_TEMPLATES || {};
     }
@@ -399,11 +441,67 @@ class VoiceCommandParser {
             || this.parseSizeAdjust(text)
             || this.parseColorAdjustment(text, currentColor)
             || this.parseColorChange(text)
+            || this.parseComplexCommand(text)
             || this.parsePatternCommand(text)
             || this.parseSceneCommand(text)
             || this.parseDrawCommand(text)
             || this.parseTextCommand(text)
             || { action: 'unknown', raw: text };
+    }
+
+    /**
+     * 解析复杂对话命令
+     * "五颜六色的椭圆圆环" → 彩虹色图案
+     * "圆形圆环" → 圆环形状
+     */
+    parseComplexCommand(text) {
+        // 检测 "五颜六色的XXX" → 彩虹色
+        const wuyanMatch = text.match(/五颜六色(?:的|de)?(.+)/);
+        if (wuyanMatch) {
+            const shapePart = wuyanMatch[1];
+            const shapeResult = this.findShape(shapePart);
+            const shape = shapeResult ? shapeResult.shape : 'circle';
+            const region = this.findRegion(text) || 'center';
+            const size = this.findSize(text);
+            const rainbowColors = ['#FF0000', '#FFA500', '#FFD700', '#00AA00', '#0000FF', '#800080'];
+            return {
+                action: 'complex', mode: 'pattern', shape,
+                colors: rainbowColors, region, size,
+                segments: 12, label: `五颜六色${shapeResult ? shapeResult.label : '圆'}`
+            };
+        }
+
+        // 检测 "花花绿绿的XXX" → 多色
+        const huahuaMatch = text.match(/花花绿绿(?:的|de)?(.+)/);
+        if (huahuaMatch) {
+            const shapePart = huahuaMatch[1];
+            const shapeResult = this.findShape(shapePart);
+            const shape = shapeResult ? shapeResult.shape : 'circle';
+            const region = this.findRegion(text) || 'center';
+            const size = this.findSize(text);
+            const multiColors = ['#FF0000', '#00AA00', '#0000FF', '#FFD700', '#FF69B4', '#FFA500'];
+            return {
+                action: 'complex', mode: 'pattern', shape,
+                colors: multiColors, region, size,
+                segments: 12, label: `花花绿绿${shapeResult ? shapeResult.label : '圆'}`
+            };
+        }
+
+        // 检测 "圆形圆环" / "椭圆圆环" → 特殊圆环形状
+        if (/圆环/.test(text)) {
+            const isEllipse = /椭圆/.test(text);
+            const shape = isEllipse ? 'ellipse' : 'circle';
+            const region = this.findRegion(text) || 'center';
+            const size = this.findSize(text) || 80;
+            const colorResult = this.findColor(text);
+            const color = colorResult ? colorResult.color : '#4169E1';
+            return {
+                action: 'complex', mode: 'ring', shape, color,
+                region, size, label: isEllipse ? '椭圆圆环' : '圆形圆环'
+            };
+        }
+
+        return null;
     }
 
     /**
@@ -673,6 +771,57 @@ class VoiceCommandParser {
         // 精确数值
         const numMatch = text.match(/(?:大小|画笔|粗细|尺寸|设置|直径|半径|宽度)(\d+)/);
         if (numMatch) return { action: 'size', value: parseInt(numMatch[1]) };
+
+        return null;
+    }
+
+    /**
+     * 解析画笔类型命令
+     * 匹配："毛笔"、"用钢笔"、"换成铅笔"、"切换水彩笔" 等
+     */
+    parsePenTypeCommand(text) {
+        for (const [keyword, type] of this.penTypeEntries) {
+            if (text.includes(keyword)) {
+                return { action: 'pen_type', type, label: keyword };
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 解析 RGB 颜色命令
+     * 支持格式：
+     *   "RGB 255 0 0" / "rgb255,0,0"
+     *   "颜色255,0,0" / "颜色值255,0,0"
+     *   "色值ff0000" / "色号ff0000"
+     */
+    parseRGBColorCommand(text) {
+        // 模式1: RGB + 三个数字（空格或逗号分隔）
+        const rgbMatch = text.match(/rgb\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})/i);
+        if (rgbMatch) {
+            const r = Math.min(255, parseInt(rgbMatch[1]));
+            const g = Math.min(255, parseInt(rgbMatch[2]));
+            const b = Math.min(255, parseInt(rgbMatch[3]));
+            const hex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+            return { action: 'color', color: hex, label: `RGB(${r},${g},${b})` };
+        }
+
+        // 模式2: 颜色/颜色值 + 三个数字
+        const colorNumMatch = text.match(/(?:颜色值?|色值|色号)\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})/);
+        if (colorNumMatch) {
+            const r = Math.min(255, parseInt(colorNumMatch[1]));
+            const g = Math.min(255, parseInt(colorNumMatch[2]));
+            const b = Math.min(255, parseInt(colorNumMatch[3]));
+            const hex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+            return { action: 'color', color: hex, label: `RGB(${r},${g},${b})` };
+        }
+
+        // 模式3: 色值/色号 + 十六进制
+        const hexMatch = text.match(/(?:色值|色号|颜色)\s*([0-9a-fA-F]{6})/);
+        if (hexMatch) {
+            const hex = '#' + hexMatch[1].toUpperCase();
+            return { action: 'color', color: hex, label: `色值${hexMatch[1]}` };
+        }
 
         return null;
     }
@@ -1030,6 +1179,7 @@ class VoiceCommandParser {
                 }
                 return '视口操作';
             }
+            case 'pen_type': return `切换为${cmd.label}笔`;
             default: return '执行命令';
         }
     }
