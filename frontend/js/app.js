@@ -209,6 +209,7 @@ class App {
 
         switch (cmd.action) {
             case 'draw':    this.cmdDraw(cmd); break;
+            case 'scene':   this.cmdScene(cmd); break;
             case 'text':    this.cmdText(cmd); break;
             case 'delete':  this.cmdDelete(cmd); break;
             case 'start_draw': this.cmdStartDraw(); break;
@@ -267,6 +268,13 @@ class App {
 
         this.showFeedback(`${colorName}${shapeName} → ${regionName}`, 'success');
         this.tts.speak(`好的，${regionName}的${colorName}${shapeName}画好了。`);
+    }
+
+    cmdScene(cmd) {
+        this.canvas.drawScene(cmd.shapes);
+        const sceneName = cmd.label || cmd.template;
+        this.showFeedback(`已绘制场景: ${sceneName}`, 'success');
+        this.tts.speak(`已为你画出${sceneName}。`);
     }
 
     cmdText(cmd) {

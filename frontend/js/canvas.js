@@ -135,17 +135,27 @@ class CanvasDrawingModule {
      * @param {string} region - 区域
      * @param {string} color - 颜色
      * @param {number} size - 大小
+     * @param {number} [offsetX=0] - X轴偏移量
+     * @param {number} [offsetY=0] - Y轴偏移量
+     * @param {boolean} [fill=false] - 是否填充
      */
-    drawShapeAtRegion(shape, region, color, size) {
-        const coords = this.regionToCoords(region);
+    drawShapeAtRegion(shape, region, color, size, offsetX, offsetY, fill) {
+        const baseCoords = this.regionToCoords(region);
+        const coords = {
+            x: baseCoords.x + (offsetX || 0),
+            y: baseCoords.y + (offsetY || 0),
+        };
         const s = size || this.shapeSize;
         const c = color || this.currentColor;
+        const shouldFill = !!fill;
 
         // 记录形状
         this.shapes.push({
             type: shape, color: c, size: s, region,
             cx: coords.x, cy: coords.y,
+            offsetX: offsetX || 0, offsetY: offsetY || 0,
             lineWidth: this.brushSize,
+            fill: shouldFill,
         });
 
         this.ctx.save();
@@ -155,22 +165,22 @@ class CanvasDrawingModule {
 
         switch (shape) {
             case 'circle':
-                this.drawCircle(coords.x, coords.y, s / 2);
+                this.drawCircle(coords.x, coords.y, s / 2, shouldFill);
                 break;
             case 'ellipse':
-                this.drawEllipse(coords.x, coords.y, s / 2, s / 3);
+                this.drawEllipse(coords.x, coords.y, s / 2, s / 3, shouldFill);
                 break;
             case 'rect':
-                this.drawRect(coords.x - s / 2, coords.y - s / 2, s, s);
+                this.drawRect(coords.x - s / 2, coords.y - s / 2, s, s, shouldFill);
                 break;
             case 'triangle':
-                this.drawTriangle(coords.x, coords.y, s);
+                this.drawTriangle(coords.x, coords.y, s, shouldFill);
                 break;
             case 'star':
-                this.drawStar(coords.x, coords.y, s / 2, s / 4, 5);
+                this.drawStar(coords.x, coords.y, s / 2, s / 4, 5, shouldFill);
                 break;
             case 'heart':
-                this.drawHeart(coords.x, coords.y, s);
+                this.drawHeart(coords.x, coords.y, s, shouldFill);
                 break;
             case 'arrow':
                 this.drawArrow(coords.x - s / 2, coords.y, coords.x + s / 2, coords.y);
@@ -182,7 +192,7 @@ class CanvasDrawingModule {
                 this.drawLine(coords.x, coords.y - s, coords.x, coords.y + s);
                 break;
             default:
-                this.drawCircle(coords.x, coords.y, s / 2);
+                this.drawCircle(coords.x, coords.y, s / 2, shouldFill);
         }
 
         this.ctx.restore();
@@ -213,36 +223,58 @@ class CanvasDrawingModule {
         this.saveState();
     }
 
+    /**
+     * 绘制场景（多个形状的组合）
+     * @param {Array} shapes - 形状命令数组，每个元素包含 shape, region, color, size 等属性
+     */
+    drawScene(shapes) {
+        for (const s of shapes) {
+            this.drawShapeAtRegion(
+                s.shape,
+                s.region || 'center',
+                s.color,
+                s.size,
+                s.offsetX || 0,
+                s.offsetY || 0,
+                s.fill || false
+            );
+        }
+    }
+
     // 基础图形绘制方法
-    drawCircle(cx, cy, r) {
+    drawCircle(cx, cy, r, fill) {
         this.ctx.beginPath();
         this.ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        if (fill) this.ctx.fill();
         this.ctx.stroke();
     }
 
-    drawEllipse(cx, cy, rx, ry) {
+    drawEllipse(cx, cy, rx, ry, fill) {
         this.ctx.beginPath();
         this.ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        if (fill) this.ctx.fill();
         this.ctx.stroke();
     }
 
-    drawRect(x, y, w, h) {
+    drawRect(x, y, w, h, fill) {
         this.ctx.beginPath();
         this.ctx.rect(x, y, w, h);
+        if (fill) this.ctx.fill();
         this.ctx.stroke();
     }
 
-    drawTriangle(cx, cy, size) {
+    drawTriangle(cx, cy, size, fill) {
         const h = size * Math.sqrt(3) / 2;
         this.ctx.beginPath();
         this.ctx.moveTo(cx, cy - h * 2 / 3);
         this.ctx.lineTo(cx - size / 2, cy + h / 3);
         this.ctx.lineTo(cx + size / 2, cy + h / 3);
         this.ctx.closePath();
+        if (fill) this.ctx.fill();
         this.ctx.stroke();
     }
 
-    drawStar(cx, cy, outerR, innerR, points) {
+    drawStar(cx, cy, outerR, innerR, points, fill) {
         this.ctx.beginPath();
         for (let i = 0; i < points * 2; i++) {
             const r = i % 2 === 0 ? outerR : innerR;
@@ -253,15 +285,17 @@ class CanvasDrawingModule {
             else this.ctx.lineTo(x, y);
         }
         this.ctx.closePath();
+        if (fill) this.ctx.fill();
         this.ctx.stroke();
     }
 
-    drawHeart(cx, cy, size) {
+    drawHeart(cx, cy, size, fill) {
         const s = size / 2;
         this.ctx.beginPath();
         this.ctx.moveTo(cx, cy + s * 0.7);
         this.ctx.bezierCurveTo(cx - s, cy - s * 0.3, cx - s * 0.5, cy - s, cx, cy - s * 0.5);
         this.ctx.bezierCurveTo(cx + s * 0.5, cy - s, cx + s, cy - s * 0.3, cx, cy + s * 0.7);
+        if (fill) this.ctx.fill();
         this.ctx.stroke();
     }
 
@@ -518,25 +552,26 @@ class CanvasDrawingModule {
         this.ctx.strokeStyle = shape.color;
         this.ctx.fillStyle = shape.color;
         this.ctx.lineWidth = shape.lineWidth || this.brushSize;
+        const fill = shape.fill || false;
 
         switch (shape.type) {
             case 'circle':
-                this.drawCircle(shape.cx, shape.cy, shape.size / 2);
+                this.drawCircle(shape.cx, shape.cy, shape.size / 2, fill);
                 break;
             case 'ellipse':
-                this.drawEllipse(shape.cx, shape.cy, shape.size / 2, shape.size / 3);
+                this.drawEllipse(shape.cx, shape.cy, shape.size / 2, shape.size / 3, fill);
                 break;
             case 'rect':
-                this.drawRect(shape.cx - shape.size / 2, shape.cy - shape.size / 2, shape.size, shape.size);
+                this.drawRect(shape.cx - shape.size / 2, shape.cy - shape.size / 2, shape.size, shape.size, fill);
                 break;
             case 'triangle':
-                this.drawTriangle(shape.cx, shape.cy, shape.size);
+                this.drawTriangle(shape.cx, shape.cy, shape.size, fill);
                 break;
             case 'star':
-                this.drawStar(shape.cx, shape.cy, shape.size / 2, shape.size / 4, 5);
+                this.drawStar(shape.cx, shape.cy, shape.size / 2, shape.size / 4, 5, fill);
                 break;
             case 'heart':
-                this.drawHeart(shape.cx, shape.cy, shape.size);
+                this.drawHeart(shape.cx, shape.cy, shape.size, fill);
                 break;
             case 'arrow':
                 this.drawArrow(shape.cx - shape.size / 2, shape.cy, shape.cx + shape.size / 2, shape.cy);
