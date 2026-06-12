@@ -1,8 +1,10 @@
 /**
- * 纯语音控制绘图工具 - 主应用
+ * 纯语音控制绘图工具 - 主应用（优化版）
  *
- * 核心流程：语音识别 → 命令解析 → 执行绘图 → 语音反馈
- * 设计原则：零鼠标/键盘依赖，所有操作通过语音完成
+ * 核心优化：
+ * 1. TTS 播报期间自动暂停语音识别，防止回声干扰
+ * 2. TTS 结束后自动恢复识别，无缝衔接下一条指令
+ * 3. 智能反馈：短命令用短回复，减少 TTS 占用时间
  */
 
 class App {
@@ -17,27 +19,17 @@ class App {
         // 应用状态
         this.isListening = false;
         this.showHelp = false;
-        this.showGrid = false;
-        this.feedbackTimer = null;
-        this.pendingRepeat = null; // 上一条未确认的命令（用于重复执行）
 
         // DOM 元素
         this.el = {
-            // 状态栏
             statusTool: document.getElementById('status-tool'),
             statusColorDot: document.getElementById('status-color-dot'),
             statusColor: document.getElementById('status-color'),
             statusSize: document.getElementById('status-size'),
             helpToggle: document.getElementById('btn-help-toggle'),
-
-            // 画布
             penIndicator: document.getElementById('pen-indicator'),
-
-            // 帮助面板
             helpPanel: document.getElementById('help-panel'),
             helpClose: document.getElementById('btn-help-close'),
-
-            // 语音
             btnVoice: document.getElementById('btn-voice'),
             voiceStatus: document.getElementById('voice-status'),
             voiceWave: document.getElementById('voice-wave'),
@@ -51,6 +43,7 @@ class App {
     init() {
         this.bindEvents();
         this.setupSpeechCallbacks();
+        this.setupTTSCallbacks();
         this.updateStatusBar();
         this.showWelcome();
     }
@@ -60,7 +53,6 @@ class App {
     // ============================================================
 
     showWelcome() {
-        // 创建欢迎遮罩
         const overlay = document.createElement('div');
         overlay.className = 'welcome-overlay';
         overlay.innerHTML = `
@@ -71,7 +63,8 @@ class App {
                     说出指令，我来帮你画！<br><br>
                     <strong>示例指令：</strong><br>
                     "画一个红色圆形在中间"<br>
-                    "画一条蓝色直线从左上到右下"<br>
+                    "帮我画个大一点的蓝色矩形放右上角"<br>
+                    "从左上到右下画一条线"<br>
                     "撤销" / "清除" / "保存"
                 </p>
                 <button class="welcome-btn" id="btn-start">🎤 开始使用</button>
@@ -79,7 +72,6 @@ class App {
         `;
         document.body.appendChild(overlay);
 
-        // 点击开始
         document.getElementById('btn-start').addEventListener('click', () => {
             overlay.classList.add('hidden');
             setTimeout(() => overlay.remove(), 500);
@@ -93,16 +85,35 @@ class App {
     // ============================================================
 
     bindEvents() {
-        // 语音按钮
         this.el.btnVoice.addEventListener('click', () => this.toggleListening());
-
-        // 帮助面板
         this.el.helpToggle.addEventListener('click', () => this.toggleHelp());
         this.el.helpClose.addEventListener('click', () => this.toggleHelp());
     }
 
     // ============================================================
-    // 语音回调设置
+    // TTS 回调：播报期间暂停/恢复语音识别
+    // ============================================================
+
+    setupTTSCallbacks() {
+        this.tts.onSpeakStart = () => {
+            // TTS 开始播报 → 暂停语音识别，防止回声
+            this.speech.pause();
+            this.el.voiceStatus.textContent = '🔊 播报中（暂停聆听）';
+            this.el.voiceWave.classList.add('hidden');
+        };
+
+        this.tts.onSpeakEnd = () => {
+            // TTS 播报结束 → 恢复语音识别
+            this.speech.resume();
+            if (this.speech.shouldBeListening) {
+                this.el.voiceStatus.textContent = '正在聆听';
+                this.el.voiceWave.classList.remove('hidden');
+            }
+        };
+    }
+
+    // ============================================================
+    // 语音回调
     // ============================================================
 
     setupSpeechCallbacks() {
@@ -110,8 +121,10 @@ class App {
             this.isListening = true;
             this.el.btnVoice.classList.add('listening');
             this.el.btnVoice.querySelector('.voice-label').textContent = '正在聆听...';
-            this.el.voiceStatus.textContent = '正在聆听';
-            this.el.voiceWave.classList.remove('hidden');
+            if (!this.tts.speaking) {
+                this.el.voiceStatus.textContent = '正在聆听';
+                this.el.voiceWave.classList.remove('hidden');
+            }
         };
 
         this.speech.onInterim = (text) => {
@@ -125,10 +138,12 @@ class App {
 
         this.speech.onEnd = () => {
             this.isListening = false;
-            this.el.btnVoice.classList.remove('listening');
-            this.el.btnVoice.querySelector('.voice-label').textContent = '点击开启语音';
-            this.el.voiceStatus.textContent = '已暂停';
-            this.el.voiceWave.classList.add('hidden');
+            if (!this.speech.isPaused) {
+                this.el.btnVoice.classList.remove('listening');
+                this.el.btnVoice.querySelector('.voice-label').textContent = '点击开启语音';
+                this.el.voiceStatus.textContent = '已暂停';
+                this.el.voiceWave.classList.add('hidden');
+            }
         };
 
         this.speech.onError = (error) => {
@@ -164,6 +179,7 @@ class App {
 
     stopListening() {
         this.speech.stop();
+        this.tts.cancel();
         this.el.voiceStatus.textContent = '已停止';
     }
 
@@ -174,7 +190,6 @@ class App {
     processVoiceInput(text) {
         if (!text || text.trim().length === 0) return;
 
-        // 解析命令
         const commands = this.parser.parse(text);
 
         if (commands.length === 0) {
@@ -183,7 +198,6 @@ class App {
             return;
         }
 
-        // 执行每个命令
         for (const cmd of commands) {
             this.executeCommand(cmd);
             this.history.push(cmd);
@@ -194,70 +208,43 @@ class App {
         if (!cmd) return;
 
         switch (cmd.action) {
-            case 'draw':
-                this.cmdDraw(cmd);
-                break;
-            case 'text':
-                this.cmdText(cmd);
-                break;
-            case 'start_draw':
-                this.cmdStartDraw();
-                break;
-            case 'stop_draw':
-                this.cmdStopDraw();
-                break;
-            case 'move':
-                this.cmdMove(cmd);
-                break;
-            case 'color':
-                this.cmdColor(cmd);
-                break;
-            case 'size':
-                this.cmdSize(cmd);
-                break;
-            case 'undo':
-                this.cmdUndo();
-                break;
-            case 'redo':
-                this.cmdRedo();
-                break;
-            case 'clear':
-                this.cmdClear();
-                break;
-            case 'save':
-                this.cmdSave();
-                break;
-            case 'help':
-                this.cmdHelp();
-                break;
+            case 'draw':    this.cmdDraw(cmd); break;
+            case 'text':    this.cmdText(cmd); break;
+            case 'start_draw': this.cmdStartDraw(); break;
+            case 'stop_draw':  this.cmdStopDraw(); break;
+            case 'move':    this.cmdMove(cmd); break;
+            case 'color':   this.cmdColor(cmd); break;
+            case 'size':    this.cmdSize(cmd); break;
+            case 'undo':    this.cmdUndo(); break;
+            case 'redo':    this.cmdRedo(); break;
+            case 'clear':   this.cmdClear(); break;
+            case 'save':    this.cmdSave(); break;
+            case 'help':    this.cmdHelp(); break;
             case 'unknown':
                 this.showFeedback(`未理解: "${cmd.raw}"`, 'error');
-                this.tts.speak('没有理解这个指令，请参考帮助。');
+                this.tts.speak('没听懂，请参考帮助。');
                 break;
         }
     }
 
     // ============================================================
-    // 命令执行方法
+    // 命令执行方法（优化：精简 TTS 反馈，减少占用时间）
     // ============================================================
 
-    /**
-     * 绘制图形
-     */
     cmdDraw(cmd) {
         const color = cmd.color || this.canvas.currentColor;
         const size = cmd.size || this.canvas.shapeSize;
 
-        // 更新当前状态
         if (cmd.color) this.canvas.setColor(cmd.color);
         if (cmd.size) this.canvas.setShapeSize(cmd.size);
 
-        // 线条特殊处理（有起点和终点）
+        // 线条：起点到终点
         if (cmd.shape === 'line' && cmd.startRegion && cmd.endRegion) {
-            this.canvas.drawLineBetweenRegions(cmd.startRegion, cmd.endRegion, color, cmd.size);
-            const desc = this.parser.describeCommand(cmd);
-            this.showFeedback(desc, 'success');
-            this.tts.speak(`好的，已在${this.canvas.getRegionLabel(cmd.startRegion)}到${this.canvas.getRegionLabel(cmd.endRegion)}之间画了一条线。`);
+            this.canvas.drawLineBetweenRegions(cmd.startRegion, cmd.endRegion, color, size);
+            const r1 = this.canvas.getRegionLabel(cmd.startRegion);
+            const r2 = this.canvas.getRegionLabel(cmd.endRegion);
+            this.showFeedback(`${r1} → ${r2} 线条`, 'success');
+            this.tts.speak(`好的，${r1}到${r2}画好了。`);
             return;
         }
 
@@ -265,87 +252,66 @@ class App {
         if (cmd.shape === 'hline' || cmd.shape === 'vline') {
             this.canvas.drawShapeAtRegion(cmd.shape, cmd.region, color, size);
             const label = cmd.shape === 'hline' ? '横线' : '竖线';
-            this.showFeedback(`在${this.canvas.getRegionLabel(cmd.region)}画了${label}`, 'success');
-            this.tts.speak(`好的，已在${this.canvas.getRegionLabel(cmd.region)}画了一条${label}。`);
+            this.showFeedback(`${label} → ${this.canvas.getRegionLabel(cmd.region)}`, 'success');
+            this.tts.speak(`${label}画好了。`);
             return;
         }
 
         // 普通形状
         this.canvas.drawShapeAtRegion(cmd.shape, cmd.region, color, size);
 
-        // 构建反馈
         const colorName = this.getColorName(color);
         const shapeName = this.getShapeName(cmd.shape);
         const regionName = this.canvas.getRegionLabel(cmd.region);
 
-        const feedback = `${colorName}${shapeName} → ${regionName}`;
-        this.showFeedback(feedback, 'success');
-        this.tts.speak(`好的，已在${regionName}画了一个${colorName}${shapeName}。`);
-
-        this.pendingRepeat = cmd;
+        this.showFeedback(`${colorName}${shapeName} → ${regionName}`, 'success');
+        this.tts.speak(`好的，${regionName}的${colorName}${shapeName}画好了。`);
     }
 
-    /**
-     * 文字标注
-     */
     cmdText(cmd) {
         const color = this.canvas.currentColor;
         this.canvas.drawTextAtRegion(cmd.content, cmd.region, 28, color);
 
         const regionName = this.canvas.getRegionLabel(cmd.region);
-        this.showFeedback(`文字"${cmd.content}" → ${regionName}`, 'success');
-        this.tts.speak(`好的，已在${regionName}写上了${cmd.content}。`);
+        this.showFeedback(`"${cmd.content}" → ${regionName}`, 'success');
+        this.tts.speak(`写好了。`);
     }
 
-    /**
-     * 开始自由画笔
-     */
     cmdStartDraw() {
         this.canvas.startFreeDraw();
         this.el.penIndicator.classList.remove('hidden');
         this.showFeedback('自由画笔已开启', 'info');
-        this.tts.speak('自由画笔已开启。请用方向指令控制画笔移动，比如说往上、往左。');
+        this.tts.speak('画笔已开启，请用方向指令控制。');
     }
 
-    /**
-     * 停止自由画笔
-     */
     cmdStopDraw() {
         this.canvas.stopFreeDraw();
         this.el.penIndicator.classList.add('hidden');
         this.showFeedback('自由画笔已停止', 'info');
-        this.tts.speak('已停止自由绘画。');
+        this.tts.speak('已停止。');
     }
 
-    /**
-     * 方向移动（自由画模式）
-     */
     cmdMove(cmd) {
         if (!this.canvas.isFreeDrawing) {
-            this.showFeedback('请先说"开始画"开启画笔', 'error');
-            this.tts.speak('请先说开始画，开启自由画笔模式。');
+            this.showFeedback('请先说"开始画"', 'error');
+            this.tts.speak('请先说开始画。');
             return;
         }
 
         this.canvas.movePen(cmd.direction);
-        this.showFeedback(`画笔向${cmd.label}移动`, 'info');
+        this.showFeedback(`→ ${cmd.label}`, 'info');
+        // 方向移动不播报，避免频繁打断
     }
 
-    /**
-     * 切换颜色
-     */
     cmdColor(cmd) {
         this.canvas.setColor(cmd.color);
         this.updateStatusBar();
 
         const colorName = cmd.label || this.getColorName(cmd.color);
         this.showFeedback(`颜色: ${colorName}`, 'success');
-        this.tts.speak(`好的，已切换为${colorName}。`);
+        this.tts.speak(`${colorName}。`);
     }
 
-    /**
-     * 调整大小
-     */
     cmdSize(cmd) {
         let newSize;
         let desc;
@@ -358,7 +324,7 @@ class App {
             desc = '变小';
         } else {
             newSize = cmd.value;
-            desc = `设为${newSize}`;
+            desc = `${newSize}`;
         }
 
         this.canvas.setShapeSize(newSize);
@@ -366,59 +332,44 @@ class App {
         this.updateStatusBar();
 
         this.showFeedback(`大小: ${desc}`, 'success');
-        this.tts.speak(`好的，大小已${desc}。`);
+        this.tts.speak(`好的，${desc}。`);
     }
 
-    /**
-     * 撤销
-     */
     cmdUndo() {
         if (this.canvas.undo()) {
             this.showFeedback('已撤销', 'success');
-            this.tts.speak('已撤销。');
+            this.tts.speak('撤销了。');
         } else {
-            this.showFeedback('没有可以撤销的操作', 'error');
-            this.tts.speak('没有可以撤销的操作了。');
+            this.showFeedback('无法撤销', 'error');
+            this.tts.speak('没有可撤销的了。');
         }
     }
 
-    /**
-     * 重做
-     */
     cmdRedo() {
         if (this.canvas.redo()) {
             this.showFeedback('已重做', 'success');
-            this.tts.speak('已重做。');
+            this.tts.speak('重做了。');
         } else {
-            this.showFeedback('没有可以重做的操作', 'error');
-            this.tts.speak('没有可以重做的操作了。');
+            this.showFeedback('无法重做', 'error');
+            this.tts.speak('没有可重做的了。');
         }
     }
 
-    /**
-     * 清除画布
-     */
     cmdClear() {
         this.canvas.clearCanvas(true);
         this.showFeedback('画布已清除', 'success');
-        this.tts.speak('画布已清除。');
+        this.tts.speak('清除了。');
     }
 
-    /**
-     * 保存图片
-     */
     cmdSave() {
         this.canvas.saveImage();
         this.showFeedback('图片已保存', 'success');
-        this.tts.speak('图片已保存到下载文件夹。');
+        this.tts.speak('已保存。');
     }
 
-    /**
-     * 显示帮助
-     */
     cmdHelp() {
         if (!this.showHelp) this.toggleHelp();
-        this.tts.speak('已打开帮助面板。你可以画圆形、矩形、三角形、线条等图形，也可以切换颜色和大小，或者使用自由画笔模式。');
+        this.tts.speak('已打开帮助，可以说画圆、画方、画线，也可以说颜色和大小。');
     }
 
     // ============================================================
@@ -426,19 +377,16 @@ class App {
     // ============================================================
 
     updateStatusBar() {
-        // 工具
         const toolNames = {
             'pen': '画笔', 'line': '直线', 'rect': '矩形',
             'circle': '圆形', 'eraser': '橡皮擦',
         };
         this.el.statusTool.textContent = toolNames[this.canvas.currentTool] || '画笔';
 
-        // 颜色
         const colorName = this.getColorName(this.canvas.currentColor);
         this.el.statusColor.textContent = colorName;
         this.el.statusColorDot.style.background = this.canvas.currentColor;
 
-        // 大小
         this.el.statusSize.textContent = this.canvas.shapeSize;
     }
 
@@ -447,9 +395,6 @@ class App {
         this.el.helpPanel.classList.toggle('hidden', !this.showHelp);
     }
 
-    /**
-     * 显示命令反馈
-     */
     showFeedback(text, type = 'info') {
         const item = document.createElement('div');
         item.className = `feedback-item ${type}`;
@@ -457,12 +402,10 @@ class App {
 
         this.el.voiceFeedback.appendChild(item);
 
-        // 最多保留3个反馈
         while (this.el.voiceFeedback.children.length > 3) {
             this.el.voiceFeedback.removeChild(this.el.voiceFeedback.firstChild);
         }
 
-        // 5秒后移除
         setTimeout(() => {
             if (item.parentNode) {
                 item.style.opacity = '0';
@@ -500,9 +443,7 @@ class App {
     }
 }
 
-// ============================================================
 // 启动
-// ============================================================
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new App();
 });
