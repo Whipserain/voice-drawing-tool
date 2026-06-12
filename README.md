@@ -92,16 +92,17 @@
 ## 📁 项目结构
 
 ```
-ai/
-├── index.html           # 主页面（语音优先UI）
-├── css/
-│   └── style.css        # 样式（全屏画布+浮动面板）
-├── js/
-│   ├── speech.js        # 语音模块（识别+解析+TTS+历史）
-│   ├── canvas.js        # 画布模块（区域绘图系统）
-│   └── app.js           # 主应用逻辑
-├── DESIGN_DOCUMENT.md   # 设计文档
-└── README.md            # 本文件
+voice-drawing-tool/
+├── frontend/                # 前端模块（直接部署此目录即可）
+│   ├── index.html           # 主页面（语音优先UI）
+│   ├── css/
+│   │   └── style.css        # 样式（全屏画布+浮动面板）
+│   └── js/
+│       ├── speech.js        # 语音模块（识别+解析+TTS+历史）
+│       ├── canvas.js        # 画布模块（区域绘图系统）
+│       └── app.js           # 主应用逻辑
+├── DESIGN_DOCUMENT.md       # 设计文档
+└── README.md                # 本文件
 ```
 
 ## 🛠️ 技术栈
