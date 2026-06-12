@@ -337,6 +337,12 @@ class VoiceCommandParser {
         this.penTypeEntries = cfg.penTypeEntries || [];
         this.fillerWords = cfg.fillerWords || [];
         this.sceneTemplates = window.SCENE_TEMPLATES || {};
+
+        // 口语化同义词（从 commands.js 加载）
+        this.colloquialSynonyms = window.COLLOQUIAL_SYNONYMS || {};
+
+        // 纠错命令词汇
+        this.errorCorrectionWords = window.ERROR_CORRECTION_WORDS || [];
     }
 
     /**
@@ -382,6 +388,16 @@ class VoiceCommandParser {
 
         // 中文数字转阿拉伯数字
         text = this.chineseToNumber(text);
+
+        // 口语化同义词替换（按长度降序）
+        const sortedSynonyms = Object.entries(this.colloquialSynonyms)
+            .sort((a, b) => b[0].length - a[0].length);
+        for (const [from, to] of sortedSynonyms) {
+            if (text.includes(from)) {
+                // 对于形状和颜色同义词，替换后保留原位置信息
+                text = text.replace(from, to);
+            }
+        }
 
         return text;
     }
@@ -435,7 +451,8 @@ class VoiceCommandParser {
         }
 
         // 兜底：如果 Registry 未初始化，使用内置链
-        return this.parseAction(text)
+        return this.parseErrorCorrection(text)
+            || this.parseAction(text)
             || this.parseDeleteCommand(text)
             || this.parseDirection(text)
             || this.parsePenTypeCommand(text)
@@ -458,6 +475,19 @@ class VoiceCommandParser {
      * "连接左边和右边" → connect
      * "...连到..." → connect
      */
+    /**
+     * 解析纠错命令
+     * "不对"、"画错了"、"不是这个意思" → error_correction
+     */
+    parseErrorCorrection(text) {
+        for (const word of this.errorCorrectionWords) {
+            if (text.includes(word)) {
+                return { action: 'error_correction', raw: word };
+            }
+        }
+        return null;
+    }
+
     parseConnectCommand(text) {
         if (!/连接|连起来|连到/.test(text)) return null;
 

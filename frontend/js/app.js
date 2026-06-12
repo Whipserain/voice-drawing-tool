@@ -82,6 +82,7 @@ class App {
         CommandRegistry.register('color',         (app, cmd) => app.cmdColor(cmd));
         CommandRegistry.register('size',          (app, cmd) => app.cmdSize(cmd));
         CommandRegistry.register('undo',          (app, cmd) => app.cmdUndo(cmd));
+        CommandRegistry.register('error_correction', (app, cmd) => app.cmdErrorCorrection(cmd));
         CommandRegistry.register('redo',          (app) => app.cmdRedo());
         CommandRegistry.register('clear',         (app) => app.cmdClear());
         CommandRegistry.register('save',          (app) => app.cmdSave());
@@ -105,6 +106,7 @@ class App {
      */
     registerParsers() {
         const p = this.parser;
+        ParserRegistry.register('error_correction', (parser, text) => parser.parseErrorCorrection(text), 5);
         ParserRegistry.register('action',       (parser, text) => parser.parseAction(text), 10);
         ParserRegistry.register('delete',       (parser, text) => parser.parseDeleteCommand(text), 20);
         ParserRegistry.register('direction',    (parser, text) => parser.parseDirection(text), 30);
@@ -813,6 +815,21 @@ class App {
         } else {
             this.showFeedback('无法撤销', 'error');
             this.tts.speak('没有可撤销的了。');
+        }
+    }
+
+    /**
+     * 纠错命令处理
+     * 用户说"不对"、"画错了"等 → 自动撤销最近一步并提示
+     */
+    cmdErrorCorrection(cmd) {
+        // 撤销最近一步
+        if (this.canvas.undo()) {
+            this.showFeedback('已撤销刚才的操作', 'success');
+            this.tts.speak('好的，已经撤回了。请再说一次你想画什么。');
+        } else {
+            this.showFeedback('没有可撤销的操作', 'info');
+            this.tts.speak('目前没有可撤销的操作。');
         }
     }
 
