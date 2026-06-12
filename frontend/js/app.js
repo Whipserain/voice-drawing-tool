@@ -210,6 +210,7 @@ class App {
         switch (cmd.action) {
             case 'draw':    this.cmdDraw(cmd); break;
             case 'scene':   this.cmdScene(cmd); break;
+            case 'pattern': this.cmdPattern(cmd); break;
             case 'text':    this.cmdText(cmd); break;
             case 'delete':  this.cmdDelete(cmd); break;
             case 'start_draw': this.cmdStartDraw(); break;
@@ -279,6 +280,19 @@ class App {
         const sceneName = cmd.label || cmd.template;
         this.showFeedback(`已绘制场景: ${sceneName}`, 'success');
         this.tts.speak(`已为你画出${sceneName}。`);
+    }
+
+    /**
+     * 绘制多色交替图案
+     */
+    cmdPattern(cmd) {
+        const size = cmd.size || this.canvas.shapeSize;
+        const region = cmd.region || 'center';
+        this.canvas.drawPattern(cmd.shape, region, cmd.colors, size, cmd.segments);
+
+        const regionName = this.canvas.getRegionLabel(region);
+        this.showFeedback(`${cmd.label} → ${regionName}`, 'success');
+        this.tts.speak(`好的，${regionName}的${cmd.label}画好了。`);
     }
 
     cmdText(cmd) {

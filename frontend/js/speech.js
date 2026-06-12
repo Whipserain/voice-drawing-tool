@@ -660,10 +660,80 @@ class VoiceCommandParser {
             || this.parseSizeAdjust(text)
             || this.parseColorAdjustment(text, currentColor)
             || this.parseColorChange(text)
+            || this.parsePatternCommand(text)
             || this.parseSceneCommand(text)
             || this.parseDrawCommand(text)
             || this.parseTextCommand(text)
             || { action: 'unknown', raw: text };
+    }
+
+    /**
+     * 解析多色图案命令
+     * "红绿相间的圆" → 红绿交替的圆形
+     * "红蓝黄相间的矩形" → 三色交替矩形
+     * "彩虹色的圆" → 彩虹渐变圆
+     */
+    parsePatternCommand(text) {
+        // 检测 "相间" 关键词
+        const xiangjianMatch = text.match(/(.+?)相间(?:的|de)?(.+)/);
+        if (xiangjianMatch) {
+            const colorPart = xiangjianMatch[1];
+            const shapePart = xiangjianMatch[2];
+
+            // 提取所有颜色
+            const colors = [];
+            let tempText = colorPart;
+            // 按长度降序匹配颜色
+            for (const [keyword, color] of this.colorEntries) {
+                if (tempText.includes(keyword)) {
+                    colors.push(color);
+                    tempText = tempText.replace(keyword, '');
+                }
+            }
+
+            // 提取形状
+            const shapeResult = this.findShape(shapePart);
+            const shape = shapeResult ? shapeResult.shape : 'circle';
+
+            // 提取位置
+            const region = this.findRegion(text) || 'center';
+
+            // 提取大小
+            let size = this.findSize(text);
+
+            if (colors.length >= 2) {
+                return {
+                    action: 'pattern',
+                    shape,
+                    colors,
+                    region,
+                    size,
+                    segments: colors.length * 2, // 每种颜色2个弧段，交替更明显
+                    label: `${colors.length}色相间${shapeResult ? shapeResult.label : '圆'}`
+                };
+            }
+        }
+
+        // 检测 "彩虹色" 关键词
+        if (/彩虹/.test(text)) {
+            const shapeResult = this.findShape(text);
+            const shape = shapeResult ? shapeResult.shape : 'circle';
+            const region = this.findRegion(text) || 'center';
+            const size = this.findSize(text);
+            const rainbowColors = ['#FF0000', '#FFA500', '#FFD700', '#00AA00', '#0000FF', '#800080'];
+
+            return {
+                action: 'pattern',
+                shape,
+                colors: rainbowColors,
+                region,
+                size,
+                segments: 6,
+                label: `彩虹${shapeResult ? shapeResult.label : '圆'}`
+            };
+        }
+
+        return null;
     }
 
     /**
@@ -1196,6 +1266,7 @@ class VoiceCommandParser {
                 if (cmd.value === 'smaller') return '变小';
                 return `大小${cmd.value}`;
             case 'scene': return `绘制${cmd.label}场景`;
+            case 'pattern': return `绘制${cmd.label}`;
             case 'start_draw': return '开始自由绘画';
             case 'stop_draw': return '停止自由绘画';
             case 'help': return '帮助';
