@@ -642,6 +642,7 @@ class VoiceCommandParser {
         if (/帮助|怎么用|你能做什么|你会什么|怎么操作|怎么玩/.test(text)) return { action: 'help' };
         if (/开始画|开始绘画|自由画|画笔模式|开始自由/.test(text)) return { action: 'start_draw' };
         if (/停止画|停|暂停|不画了|结束画|结束|好了/.test(text)) return { action: 'stop_draw' };
+        if (/画布上有什么|画布内容|读取画布|描述画布|上面有什么|有什么图形|有几个图形/.test(text)) return { action: 'read_canvas' };
         return null;
     }
 

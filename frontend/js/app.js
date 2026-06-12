@@ -222,6 +222,7 @@ class App {
             case 'clear':   this.cmdClear(); break;
             case 'save':    this.cmdSave(); break;
             case 'help':    this.cmdHelp(); break;
+            case 'read_canvas': this.cmdReadCanvas(); break;
             case 'unknown':
                 this.showFeedback(`未理解: "${cmd.raw}"`, 'error');
                 this.tts.speak('没听懂，请参考帮助。');
@@ -444,6 +445,46 @@ class App {
     cmdHelp() {
         if (!this.showHelp) this.toggleHelp();
         this.tts.speak('已打开帮助，可以说画圆、画方、画线，也可以说颜色和大小。');
+    }
+
+    cmdReadCanvas() {
+        const descriptions = this.canvas.getShapesDescription();
+
+        if (!descriptions || descriptions.length === 0) {
+            this.showFeedback('画布上没有图形', 'info');
+            this.tts.speak('画布上没有图形。');
+            return;
+        }
+
+        const shapeNameMap = {
+            'circle': '圆形', 'ellipse': '椭圆', 'rect': '矩形',
+            'triangle': '三角形', 'star': '五角星', 'heart': '爱心',
+            'arrow': '箭头', 'line': '线条', 'hline': '横线', 'vline': '竖线',
+            'text': '文字',
+        };
+
+        const parts = this.canvas.shapes.map((s) => {
+            const regionLabel = this.canvas.getRegionLabel(s.region || s.startRegion || 'center');
+            const colorName = this.getColorName(s.color);
+            const shapeName = shapeNameMap[s.type] || s.type;
+
+            if (s.type === 'text') {
+                return `${regionLabel}有文字"${s.content}"`;
+            }
+            if (s.type === 'line' && s.startRegion) {
+                const r1 = this.canvas.getRegionLabel(s.startRegion);
+                const r2 = this.canvas.getRegionLabel(s.endRegion);
+                return `${colorName}线条从${r1}到${r2}`;
+            }
+            return `${regionLabel}有一个${colorName}${shapeName}`;
+        });
+
+        const summary = `画布上有${descriptions.length}个图形`;
+        const detail = parts.join('、');
+        const fullText = `${summary}，${detail}。`;
+
+        this.showFeedback(summary + '，' + detail, 'success');
+        this.tts.speak(fullText);
     }
 
     // ============================================================
