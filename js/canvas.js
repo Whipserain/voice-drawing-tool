@@ -16,6 +16,9 @@ class CanvasDrawingModule {
         this.brushSize = 3;
         this.shapeSize = 60; // 形状默认大小
 
+        // 形状追踪（用于删除功能）
+        this.shapes = [];
+
         // 自由画笔状态
         this.isFreeDrawing = false;
         this.penX = 0;
@@ -138,6 +141,13 @@ class CanvasDrawingModule {
         const s = size || this.shapeSize;
         const c = color || this.currentColor;
 
+        // 记录形状
+        this.shapes.push({
+            type: shape, color: c, size: s, region,
+            cx: coords.x, cy: coords.y,
+            lineWidth: this.brushSize,
+        });
+
         this.ctx.save();
         this.ctx.strokeStyle = c;
         this.ctx.fillStyle = c;
@@ -185,10 +195,19 @@ class CanvasDrawingModule {
     drawLineBetweenRegions(startRegion, endRegion, color, size) {
         const start = this.regionToCoords(startRegion);
         const end = this.regionToCoords(endRegion);
+        const c = color || this.currentColor;
+        const s = size || this.brushSize;
+
+        this.shapes.push({
+            type: 'line', color: c, size: s,
+            startRegion, endRegion,
+            x1: start.x, y1: start.y, x2: end.x, y2: end.y,
+            lineWidth: s,
+        });
 
         this.ctx.save();
-        this.ctx.strokeStyle = color || this.currentColor;
-        this.ctx.lineWidth = size || this.brushSize;
+        this.ctx.strokeStyle = c;
+        this.ctx.lineWidth = s;
         this.drawLine(start.x, start.y, end.x, end.y);
         this.ctx.restore();
         this.saveState();
@@ -331,10 +350,16 @@ class CanvasDrawingModule {
     drawTextAtRegion(text, region, fontSize, color) {
         const coords = this.regionToCoords(region);
         const size = fontSize || 28;
+        const c = color || this.currentColor;
+
+        this.shapes.push({
+            type: 'text', content: text, color: c, fontSize: size, region,
+            cx: coords.x, cy: coords.y,
+        });
 
         this.ctx.save();
         this.ctx.font = `${size}px "Microsoft YaHei", "PingFang SC", sans-serif`;
-        this.ctx.fillStyle = color || this.currentColor;
+        this.ctx.fillStyle = c;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText(text, coords.x, coords.y);
@@ -386,6 +411,7 @@ class CanvasDrawingModule {
     undo() {
         if (this.historyIndex > 0) {
             this.historyIndex--;
+            if (this.shapes.length > 0) this.shapes.pop();
             this.restoreState();
             return true;
         }
@@ -417,6 +443,7 @@ class CanvasDrawingModule {
     // ================================================================
 
     clearCanvas(saveHistory = true) {
+        this.shapes = [];
         this.ctx.fillStyle = '#FFFFFF';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         if (saveHistory) this.saveState();
@@ -427,6 +454,125 @@ class CanvasDrawingModule {
         link.download = 'voice_drawing_' + new Date().toISOString().slice(0, 10) + '.png';
         link.href = this.canvas.toDataURL();
         link.click();
+    }
+
+    // ================================================================
+    // 形状删除与重绘
+    // ================================================================
+
+    /**
+     * 根据条件删除匹配的形状
+     * @param {function} matchFn - 匹配函数，接收 shape 对象，返回 true 表示删除
+     * @returns {number} 删除的数量
+     */
+    deleteShape(matchFn) {
+        const before = this.shapes.length;
+        // 删除最后一个匹配的形状（最新的）
+        for (let i = this.shapes.length - 1; i >= 0; i--) {
+            if (matchFn(this.shapes[i])) {
+                this.shapes.splice(i, 1);
+                break;
+            }
+        }
+        const deleted = before - this.shapes.length;
+        if (deleted > 0) {
+            this.redrawAll();
+        }
+        return deleted;
+    }
+
+    /**
+     * 删除最近画的一个形状（不限条件）
+     */
+    deleteLastShape() {
+        if (this.shapes.length === 0) return 0;
+        this.shapes.pop();
+        this.redrawAll();
+        return 1;
+    }
+
+    /**
+     * 重绘所有形状
+     */
+    redrawAll() {
+        // 清空白画布
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+
+        // 逐个重绘
+        for (const shape of this.shapes) {
+            this.renderShape(shape);
+        }
+
+        this.saveState();
+    }
+
+    /**
+     * 渲染单个形状对象
+     */
+    renderShape(shape) {
+        this.ctx.save();
+        this.ctx.strokeStyle = shape.color;
+        this.ctx.fillStyle = shape.color;
+        this.ctx.lineWidth = shape.lineWidth || this.brushSize;
+
+        switch (shape.type) {
+            case 'circle':
+                this.drawCircle(shape.cx, shape.cy, shape.size / 2);
+                break;
+            case 'ellipse':
+                this.drawEllipse(shape.cx, shape.cy, shape.size / 2, shape.size / 3);
+                break;
+            case 'rect':
+                this.drawRect(shape.cx - shape.size / 2, shape.cy - shape.size / 2, shape.size, shape.size);
+                break;
+            case 'triangle':
+                this.drawTriangle(shape.cx, shape.cy, shape.size);
+                break;
+            case 'star':
+                this.drawStar(shape.cx, shape.cy, shape.size / 2, shape.size / 4, 5);
+                break;
+            case 'heart':
+                this.drawHeart(shape.cx, shape.cy, shape.size);
+                break;
+            case 'arrow':
+                this.drawArrow(shape.cx - shape.size / 2, shape.cy, shape.cx + shape.size / 2, shape.cy);
+                break;
+            case 'hline':
+                this.drawLine(shape.cx - shape.size, shape.cy, shape.cx + shape.size, shape.cy);
+                break;
+            case 'vline':
+                this.drawLine(shape.cx, shape.cy - shape.size, shape.cx, shape.cy + shape.size);
+                break;
+            case 'line':
+                this.drawLine(shape.x1, shape.y1, shape.x2, shape.y2);
+                break;
+            case 'text':
+                this.ctx.font = `${shape.fontSize}px "Microsoft YaHei", "PingFang SC", sans-serif`;
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText(shape.content, shape.cx, shape.cy);
+                break;
+        }
+
+        this.ctx.restore();
+    }
+
+    /**
+     * 获取当前所有形状的描述列表（用于调试/提示）
+     */
+    getShapesDescription() {
+        return this.shapes.map((s, i) => {
+            const regionLabel = this.getRegionLabel(s.region || s.startRegion || 'center');
+            if (s.type === 'text') return `${i + 1}. 文字"${s.content}" 在${regionLabel}`;
+            if (s.type === 'line' && s.startRegion) {
+                return `${i + 1}. 线条 从${this.getRegionLabel(s.startRegion)}到${this.getRegionLabel(s.endRegion)}`;
+            }
+            return `${i + 1}. ${s.color} ${s.type} 在${regionLabel}`;
+        });
     }
 
     // ================================================================

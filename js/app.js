@@ -210,6 +210,7 @@ class App {
         switch (cmd.action) {
             case 'draw':    this.cmdDraw(cmd); break;
             case 'text':    this.cmdText(cmd); break;
+            case 'delete':  this.cmdDelete(cmd); break;
             case 'start_draw': this.cmdStartDraw(); break;
             case 'stop_draw':  this.cmdStopDraw(); break;
             case 'move':    this.cmdMove(cmd); break;
@@ -275,6 +276,71 @@ class App {
         const regionName = this.canvas.getRegionLabel(cmd.region);
         this.showFeedback(`"${cmd.content}" → ${regionName}`, 'success');
         this.tts.speak(`写好了。`);
+    }
+
+    /**
+     * 删除形状
+     */
+    cmdDelete(cmd) {
+        let deleted = 0;
+
+        if (cmd.matchType === 'last') {
+            // 删除最近画的一个
+            deleted = this.canvas.deleteLastShape();
+            if (deleted) {
+                this.showFeedback('已删除最近的图形', 'success');
+                this.tts.speak('删掉了。');
+            } else {
+                this.showFeedback('没有可删除的图形', 'error');
+                this.tts.speak('画布上没有图形。');
+            }
+            return;
+        }
+
+        // 按属性匹配删除
+        const matchFn = (shape) => {
+            // 形状类型匹配
+            if (cmd.shape) {
+                const shapeTypeMap = {
+                    'circle': ['circle'], 'rect': ['rect'], 'triangle': ['triangle'],
+                    'star': ['star'], 'heart': ['heart'], 'arrow': ['arrow'],
+                    'ellipse': ['ellipse'], 'line': ['line', 'hline', 'vline'],
+                    'hline': ['hline'], 'vline': ['vline'],
+                };
+                const matchTypes = shapeTypeMap[cmd.shape] || [cmd.shape];
+                if (!matchTypes.includes(shape.type)) return false;
+            }
+            // 颜色匹配
+            if (cmd.color && shape.color.toUpperCase() !== cmd.color.toUpperCase()) return false;
+            // 区域匹配
+            if (cmd.region && shape.region !== cmd.region) return false;
+            return true;
+        };
+
+        deleted = this.canvas.deleteShape(matchFn);
+
+        if (deleted) {
+            // 构建反馈描述
+            const parts = [];
+            if (cmd.color) {
+                const c = this.parser.colorEntries.find(([k, v]) => v === cmd.color);
+                if (c) parts.push(c[0]);
+            }
+            if (cmd.shape) {
+                const s = this.parser.shapeEntries.find(([k, v]) => v === cmd.shape);
+                if (s) parts.push(s[0]);
+            }
+            if (cmd.region) {
+                const r = this.parser.regionEntries.find(([k, v]) => v === cmd.region);
+                if (r) parts.push('在' + r[0]);
+            }
+            const desc = parts.length > 0 ? parts.join('') : '图形';
+            this.showFeedback(`已删除${desc}`, 'success');
+            this.tts.speak('删掉了。');
+        } else {
+            this.showFeedback('未找到匹配的图形', 'error');
+            this.tts.speak('没有找到符合条件的图形。');
+        }
     }
 
     cmdStartDraw() {
