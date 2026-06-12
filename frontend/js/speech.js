@@ -438,8 +438,10 @@ class VoiceCommandParser {
         return this.parseAction(text)
             || this.parseDeleteCommand(text)
             || this.parseDirection(text)
+            || this.parsePenTypeCommand(text)
             || this.parseSizeAdjust(text)
             || this.parseColorAdjustment(text, currentColor)
+            || this.parseRGBColorCommand(text)
             || this.parseColorChange(text)
             || this.parseComplexCommand(text)
             || this.parsePatternCommand(text)
@@ -447,6 +449,84 @@ class VoiceCommandParser {
             || this.parseDrawCommand(text)
             || this.parseTextCommand(text)
             || { action: 'unknown', raw: text };
+    }
+
+    /**
+     * 解析形状连接命令
+     * "把红色圆和蓝色方连起来" → connect
+     * "连接左边和右边" → connect
+     * "...连到..." → connect
+     */
+    parseConnectCommand(text) {
+        if (!/连接|连起来|连到/.test(text)) return null;
+
+        // "把A和B连起来" / "连接A和B" / "A连到B"
+        const match = text.match(/(?:把)?(.+?)(?:和|跟|与)(.+?)(?:连起来|连接|连到)/)
+            || text.match(/(?:连接)(.+?)(?:和|跟|与)(.+)/)
+            || text.match(/(.+?)(?:连到)(.+)/);
+
+        if (!match) return null;
+
+        const fromDesc = match[1];
+        const toDesc = match[2];
+
+        const fromColor = this.findColor(fromDesc);
+        const fromShape = this.findShape(fromDesc);
+        const fromRegion = this.findRegion(fromDesc);
+
+        const toColor = this.findColor(toDesc);
+        const toShape = this.findShape(toDesc);
+        const toRegion = this.findRegion(toDesc);
+
+        return {
+            action: 'connect',
+            from: {
+                color: fromColor ? fromColor.color : null,
+                shape: fromShape ? fromShape.shape : null,
+                region: fromRegion,
+            },
+            to: {
+                color: toColor ? toColor.color : null,
+                shape: toShape ? toShape.shape : null,
+                region: toRegion,
+            },
+        };
+    }
+
+    /**
+     * 解析背景颜色命令
+     * "换成黑色背景" → background
+     * "白色背景" → background
+     */
+    parseBackgroundCommand(text) {
+        if (!/背景/.test(text)) return null;
+
+        for (const [keyword, color] of this.colorEntries) {
+            if (text.includes(keyword)) {
+                return { action: 'background', color, label: keyword };
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 解析形状复制命令
+     * "复制那个红色圆" → copy
+     * "再画一个一样的" → copy
+     */
+    parseCopyCommand(text) {
+        if (!/复制|再画一个|一样的|拷贝|再来一个/.test(text)) return null;
+
+        const colorResult = this.findColor(text);
+        const shapeResult = this.findShape(text);
+        const region = this.findRegion(text);
+
+        return {
+            action: 'copy',
+            shape: shapeResult ? shapeResult.shape : null,
+            color: colorResult ? colorResult.color : null,
+            region: region,
+        };
     }
 
     /**
@@ -577,8 +657,17 @@ class VoiceCommandParser {
      * 解析操作类命令
      */
     parseAction(text) {
+        // 多步撤销："撤销三步"、"撤销全部"
+        const undoStepsMatch = text.match(/撤销(\d+)步/);
+        if (undoStepsMatch) return { action: 'undo', steps: parseInt(undoStepsMatch[1]) };
+        if (/撤销全部|全部撤销|清空撤销/.test(text)) return { action: 'undo', steps: 999 };
         if (/撤销|后退|返回上一步|上一步/.test(text)) return { action: 'undo' };
-        if (/重做|前进|下一步/.test(text)) return { action: 'redo' };
+        if (/重做|前进/.test(text)) return { action: 'redo' };
+
+        // 教程模式
+        if (/退出教程|结束教程|关闭教程/.test(text)) return { action: 'tutorial', mode: 'exit' };
+        if (/下一步/.test(text)) return { action: 'tutorial', mode: 'next' };
+        if (/教程|教我画画|怎么用|学习/.test(text)) return { action: 'tutorial', mode: 'start' };
         if (/清除|清空|清屏|清除画布|全部清除/.test(text)) return { action: 'clear' };
         if (/保存|保存图片|导出|存档/.test(text)) return { action: 'save' };
         if (/帮助|怎么用|你能做什么|你会什么|怎么操作|怎么玩/.test(text)) return { action: 'help' };
@@ -868,7 +957,7 @@ class VoiceCommandParser {
         }
 
         // 检测相对定位："在刚刚画的圆的左边"
-        const relMatch = text.match(/(?:刚刚|最后|刚才)(?:画|绘制|画的|画了)?(?:的|de)?(?:\w*?)(?:的|de)?(左边|右边|上面|下面|左上|右上|左下|右上)/);
+        const relMatch = text.match(/(?:刚刚|最后|刚才)(?:画|绘制|画的|画了)?(?:的|de)?(?:\w*?)(?:的|de)?(左边|右边|上面|下面|左上|右上|左下|右下)/);
         if (relMatch) {
             const relDir = relMatch[1];
             return {
@@ -1193,6 +1282,10 @@ class VoiceCommandParser {
                 return '视口操作';
             }
             case 'pen_type': return `切换为${cmd.label}笔`;
+            case 'connect': return '连接形状';
+            case 'background': return `设置${cmd.label}背景`;
+            case 'copy': return '复制形状';
+            case 'tutorial': return cmd.mode === 'start' ? '开始教程' : cmd.mode === 'exit' ? '退出教程' : '下一步';
             default: return '执行命令';
         }
     }

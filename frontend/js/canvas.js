@@ -16,6 +16,7 @@ class CanvasDrawingModule {
         this.brushSize = 3;
         this.shapeSize = 60; // 形状默认大小
         this.penType = 'pen'; // 画笔类型：brush/pen/pencil/watercolor/crayon/marker/chalk/oil
+        this.backgroundColor = '#FFFFFF'; // 画布背景色
 
         // 形状追踪（用于删除功能）
         this.shapes = [];
@@ -228,6 +229,45 @@ class CanvasDrawingModule {
     }
 
     /**
+     * 在两个形状之间画线
+     * @param {object} shape1 - 起始形状
+     * @param {object} shape2 - 结束形状
+     * @param {string} color - 线条颜色
+     * @param {number} size - 线条宽度
+     */
+    drawLineBetweenShapes(shape1, shape2, color, size) {
+        const c = color || this.currentColor;
+        const s = size || this.brushSize;
+
+        // 获取形状中心坐标
+        const getCenter = (sh) => {
+            if (sh.type === 'line') return { x: (sh.x1 + sh.x2) / 2, y: (sh.y1 + sh.y2) / 2 };
+            if (sh.type === 'freepath' && sh.points && sh.points.length > 0) {
+                const avgX = sh.points.reduce((sum, p) => sum + p.x, 0) / sh.points.length;
+                const avgY = sh.points.reduce((sum, p) => sum + p.y, 0) / sh.points.length;
+                return { x: avgX, y: avgY };
+            }
+            return { x: sh.cx, y: sh.cy };
+        };
+
+        const p1 = getCenter(shape1);
+        const p2 = getCenter(shape2);
+
+        this.shapes.push({
+            type: 'line', color: c, size: s,
+            x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y,
+            lineWidth: s,
+        });
+
+        this.ctx.save();
+        this.ctx.strokeStyle = c;
+        this.ctx.lineWidth = s;
+        this.drawLine(p1.x, p1.y, p2.x, p2.y);
+        this.ctx.restore();
+        this.saveState();
+    }
+
+    /**
      * 绘制场景（多个形状的组合）
      * @param {Array} shapes - 形状命令数组，每个元素包含 shape, region, color, size 等属性
      */
@@ -313,6 +353,54 @@ class CanvasDrawingModule {
         });
 
         this.saveState();
+    }
+
+    /**
+     * 纯渲染图案（不记录到 shapes，不 saveState，用于 redrawAll）
+     */
+    _renderPatternOnly(shape) {
+        const coords = this.regionToCoords(shape.region);
+        const s = shape.size || this.shapeSize;
+        const r = s / 2;
+        const segCount = shape.segments || shape.colors.length * 2;
+
+        if (shape.shape === 'circle' || shape.shape === 'ellipse') {
+            const angleStep = (Math.PI * 2) / segCount;
+            for (let i = 0; i < segCount; i++) {
+                const startAngle = i * angleStep - Math.PI / 2;
+                const endAngle = startAngle + angleStep;
+                this.ctx.save();
+                this.ctx.beginPath();
+                this.ctx.moveTo(coords.x, coords.y);
+                this.ctx.arc(coords.x, coords.y, r, startAngle, endAngle);
+                this.ctx.closePath();
+                this.ctx.fillStyle = shape.colors[i % shape.colors.length];
+                this.ctx.fill();
+                this.ctx.strokeStyle = '#000000';
+                this.ctx.lineWidth = this.brushSize;
+                this.ctx.stroke();
+                this.ctx.restore();
+            }
+        } else {
+            const cols = Math.ceil(Math.sqrt(segCount));
+            const rows = Math.ceil(segCount / cols);
+            const cellW = s / cols;
+            const cellH = s / rows;
+            const startX = coords.x - s / 2;
+            const startY = coords.y - s / 2;
+            for (let i = 0; i < segCount; i++) {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                if (row >= rows) break;
+                this.ctx.save();
+                this.ctx.fillStyle = shape.colors[i % shape.colors.length];
+                this.ctx.fillRect(startX + col * cellW, startY + row * cellH, cellW, cellH);
+                this.ctx.strokeStyle = '#000000';
+                this.ctx.lineWidth = 1;
+                this.ctx.strokeRect(startX + col * cellW, startY + row * cellH, cellW, cellH);
+                this.ctx.restore();
+            }
+        }
     }
 
     // 基础图形绘制方法
@@ -567,6 +655,7 @@ class CanvasDrawingModule {
         this._onMouseDown = (e) => this._handleMouseDown(e);
         this._onMouseMove = (e) => this._handleMouseMove(e);
         this._onMouseUp = () => this._handleMouseUp();
+        this._onMouseLeave = () => this._handleMouseUp();
         this._onTouchStart = (e) => { e.preventDefault(); this._handleMouseDown(e.touches[0]); };
         this._onTouchMove = (e) => { e.preventDefault(); this._handleMouseMove(e.touches[0]); };
         this._onTouchEnd = () => this._handleMouseUp();
@@ -574,6 +663,7 @@ class CanvasDrawingModule {
         this.canvas.addEventListener('mousedown', this._onMouseDown);
         this.canvas.addEventListener('mousemove', this._onMouseMove);
         this.canvas.addEventListener('mouseup', this._onMouseUp);
+        this.canvas.addEventListener('mouseleave', this._onMouseLeave);
         this.canvas.addEventListener('touchstart', this._onTouchStart, { passive: false });
         this.canvas.addEventListener('touchmove', this._onTouchMove, { passive: false });
         this.canvas.addEventListener('touchend', this._onTouchEnd);
@@ -590,6 +680,7 @@ class CanvasDrawingModule {
         this.canvas.removeEventListener('mousedown', this._onMouseDown);
         this.canvas.removeEventListener('mousemove', this._onMouseMove);
         this.canvas.removeEventListener('mouseup', this._onMouseUp);
+        this.canvas.removeEventListener('mouseleave', this._onMouseLeave);
         this.canvas.removeEventListener('touchstart', this._onTouchStart);
         this.canvas.removeEventListener('touchmove', this._onTouchMove);
         this.canvas.removeEventListener('touchend', this._onTouchEnd);
@@ -709,6 +800,15 @@ class CanvasDrawingModule {
         this.shapeSize = Math.max(10, Math.min(200, size));
     }
 
+    /**
+     * 设置画布背景颜色并重绘
+     * @param {string} color - 颜色 hex
+     */
+    setBackgroundColor(color) {
+        this.backgroundColor = color;
+        this.redrawAll();
+    }
+
     adjustBrushSize(delta) {
         this.setBrushSize(this.brushSize + delta);
     }
@@ -767,7 +867,7 @@ class CanvasDrawingModule {
     clearCanvas(saveHistory = true) {
         this.shapes = [];
         this.viewport = { scale: 1.0, offsetX: 0, offsetY: 0 };
-        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.fillStyle = this.backgroundColor || '#FFFFFF';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         if (saveHistory) this.saveState();
     }
@@ -856,6 +956,23 @@ class CanvasDrawingModule {
     }
 
     /**
+     * 根据属性查找匹配的形状
+     * @param {object} props - { color, shape, region }
+     * @returns {object|null} 最后一个匹配的形状
+     */
+    findShapeByProperties(props) {
+        for (let i = this.shapes.length - 1; i >= 0; i--) {
+            const s = this.shapes[i];
+            let match = true;
+            if (props.shape && s.type !== props.shape) match = false;
+            if (props.color && s.color && s.color.toUpperCase() !== props.color.toUpperCase()) match = false;
+            if (props.region && s.region !== props.region) match = false;
+            if (match) return s;
+        }
+        return null;
+    }
+
+    /**
      * 删除最近画的一个形状（不限条件）
      */
     deleteLastShape() {
@@ -872,7 +989,7 @@ class CanvasDrawingModule {
         this.ctx.save();
 
         // 清空白画布
-        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.fillStyle = this.backgroundColor || '#FFFFFF';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         // 应用视口变换
@@ -958,9 +1075,9 @@ class CanvasDrawingModule {
                 }
                 break;
             case 'pattern':
-                this.ctx.restore(); // 恢复后再单独处理图案
-                this.drawPattern(shape.shape, shape.region, shape.colors, shape.size, shape.segments);
-                return; // drawPattern 已经处理了 save/restore
+                this.ctx.restore();
+                this._renderPatternOnly(shape);
+                return;
         }
 
         this.ctx.restore();
@@ -981,6 +1098,11 @@ class CanvasDrawingModule {
             if (s.type === 'line') {
                 return { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 };
             }
+            if (s.type === 'freepath' && s.points && s.points.length > 0) {
+                const avgX = s.points.reduce((sum, p) => sum + p.x, 0) / s.points.length;
+                const avgY = s.points.reduce((sum, p) => sum + p.y, 0) / s.points.length;
+                return { x: avgX, y: avgY };
+            }
             return { x: s.cx, y: s.cy };
         };
 
@@ -993,6 +1115,11 @@ class CanvasDrawingModule {
                 const dy = newCy - oldCy;
                 s.x1 += dx; s.y1 += dy;
                 s.x2 += dx; s.y2 += dy;
+            } else if (s.type === 'freepath' && s.points) {
+                const c = getCenter(s);
+                const dx = newCx - c.x;
+                const dy = newCy - c.y;
+                s.points.forEach(p => { p.x += dx; p.y += dy; });
             } else {
                 s.cx = newCx;
                 s.cy = newCy;
@@ -1120,6 +1247,8 @@ class CanvasDrawingModule {
             if (s.type === 'line' && s.startRegion) {
                 return `${i + 1}. 线条 从${this.getRegionLabel(s.startRegion)}到${this.getRegionLabel(s.endRegion)}`;
             }
+            if (s.type === 'freepath') return `${i + 1}. 手绘路径 ${s.color}`;
+            if (s.type === 'pattern') return `${i + 1}. ${s.colors.length}色图案 在${regionLabel}`;
             return `${i + 1}. ${s.color} ${s.type} 在${regionLabel}`;
         });
     }
