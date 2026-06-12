@@ -443,6 +443,7 @@ class VoiceCommandParser {
             || this.parseColorAdjustment(text, currentColor)
             || this.parseRGBColorCommand(text)
             || this.parseColorChange(text)
+            || this.parseMoveShapeCommand(text)
             || this.parseComplexCommand(text)
             || this.parsePatternCommand(text)
             || this.parseSceneCommand(text)
@@ -526,6 +527,30 @@ class VoiceCommandParser {
             shape: shapeResult ? shapeResult.shape : null,
             color: colorResult ? colorResult.color : null,
             region: region,
+        };
+    }
+
+    /**
+     * 解析移动形状命令
+     * "移动红色圆到左边" / "把红色圆移到中间" / "把那个圆移到右边"
+     */
+    parseMoveShapeCommand(text) {
+        if (!/移动|移到|挪到|挪动/.test(text)) return null;
+
+        // 提取目标区域
+        const region = this.findRegion(text);
+
+        // 提取要移动的形状描述
+        const colorResult = this.findColor(text);
+        const shapeResult = this.findShape(text);
+
+        if (!region) return null;
+
+        return {
+            action: 'move_shape',
+            shape: shapeResult ? shapeResult.shape : null,
+            color: colorResult ? colorResult.color : null,
+            toRegion: region,
         };
     }
 
