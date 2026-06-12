@@ -374,6 +374,22 @@ class CanvasDrawingModule {
         this.penY = clampedY;
     }
 
+    /**
+     * 连续方向移动：依次执行多个方向的画笔移动
+     * @param {Array<{dx: number, dy: number}>} directions - 方向数组
+     * @param {number} [steps=1] - 每个方向的重复次数
+     */
+    movePenSequence(directions, steps) {
+        if (!this.isFreeDrawing || !directions || directions.length === 0) return;
+
+        const repeatCount = steps || 1;
+        for (let r = 0; r < repeatCount; r++) {
+            for (const dir of directions) {
+                this.movePen(dir);
+            }
+        }
+    }
+
     // ================================================================
     // 文字绘制
     // ================================================================
@@ -594,6 +610,150 @@ class CanvasDrawingModule {
         }
 
         this.ctx.restore();
+    }
+
+    /**
+     * 形状智能排列
+     * @param {string} mode - 排列模式: grid/center/align_left/align_right/align_top/align_bottom/distribute_h/distribute_v
+     */
+    arrangeShapes(mode) {
+        if (this.shapes.length === 0) return;
+
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+
+        // 获取形状的中心点坐标
+        const getCenter = (s) => {
+            if (s.type === 'line') {
+                return { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 };
+            }
+            return { x: s.cx, y: s.cy };
+        };
+
+        // 移动形状到新中心点
+        const moveTo = (s, newCx, newCy) => {
+            if (s.type === 'line') {
+                const oldCx = (s.x1 + s.x2) / 2;
+                const oldCy = (s.y1 + s.y2) / 2;
+                const dx = newCx - oldCx;
+                const dy = newCy - oldCy;
+                s.x1 += dx; s.y1 += dy;
+                s.x2 += dx; s.y2 += dy;
+            } else {
+                s.cx = newCx;
+                s.cy = newCy;
+            }
+        };
+
+        switch (mode) {
+            case 'grid': {
+                const count = this.shapes.length;
+                const cols = Math.ceil(Math.sqrt(count));
+                const rows = Math.ceil(count / cols);
+                const cellW = w / (cols + 1);
+                const cellH = h / (rows + 1);
+                for (let i = 0; i < count; i++) {
+                    const col = i % cols;
+                    const row = Math.floor(i / cols);
+                    moveTo(this.shapes[i], cellW * (col + 1), cellH * (row + 1));
+                }
+                break;
+            }
+            case 'center': {
+                // 计算所有形状的包围盒中心
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                for (const s of this.shapes) {
+                    const c = getCenter(s);
+                    minX = Math.min(minX, c.x);
+                    minY = Math.min(minY, c.y);
+                    maxX = Math.max(maxX, c.x);
+                    maxY = Math.max(maxY, c.y);
+                }
+                const bboxCx = (minX + maxX) / 2;
+                const bboxCy = (minY + maxY) / 2;
+                const dx = w / 2 - bboxCx;
+                const dy = h / 2 - bboxCy;
+                for (const s of this.shapes) {
+                    const c = getCenter(s);
+                    moveTo(s, c.x + dx, c.y + dy);
+                }
+                break;
+            }
+            case 'align_left': {
+                let minX = Infinity;
+                for (const s of this.shapes) {
+                    const c = getCenter(s);
+                    if (c.x < minX) minX = c.x;
+                }
+                for (const s of this.shapes) {
+                    const c = getCenter(s);
+                    moveTo(s, minX, c.y);
+                }
+                break;
+            }
+            case 'align_right': {
+                let maxX = -Infinity;
+                for (const s of this.shapes) {
+                    const c = getCenter(s);
+                    if (c.x > maxX) maxX = c.x;
+                }
+                for (const s of this.shapes) {
+                    const c = getCenter(s);
+                    moveTo(s, maxX, c.y);
+                }
+                break;
+            }
+            case 'align_top': {
+                let minY = Infinity;
+                for (const s of this.shapes) {
+                    const c = getCenter(s);
+                    if (c.y < minY) minY = c.y;
+                }
+                for (const s of this.shapes) {
+                    const c = getCenter(s);
+                    moveTo(s, c.x, minY);
+                }
+                break;
+            }
+            case 'align_bottom': {
+                let maxY = -Infinity;
+                for (const s of this.shapes) {
+                    const c = getCenter(s);
+                    if (c.y > maxY) maxY = c.y;
+                }
+                for (const s of this.shapes) {
+                    const c = getCenter(s);
+                    moveTo(s, c.x, maxY);
+                }
+                break;
+            }
+            case 'distribute_h': {
+                if (this.shapes.length < 3) break;
+                const sorted = [...this.shapes].sort((a, b) => getCenter(a).x - getCenter(b).x);
+                const firstX = getCenter(sorted[0]).x;
+                const lastX = getCenter(sorted[sorted.length - 1]).x;
+                const gap = (lastX - firstX) / (sorted.length - 1);
+                for (let i = 1; i < sorted.length - 1; i++) {
+                    const c = getCenter(sorted[i]);
+                    moveTo(sorted[i], firstX + gap * i, c.y);
+                }
+                break;
+            }
+            case 'distribute_v': {
+                if (this.shapes.length < 3) break;
+                const sorted = [...this.shapes].sort((a, b) => getCenter(a).y - getCenter(b).y);
+                const firstY = getCenter(sorted[0]).y;
+                const lastY = getCenter(sorted[sorted.length - 1]).y;
+                const gap = (lastY - firstY) / (sorted.length - 1);
+                for (let i = 1; i < sorted.length - 1; i++) {
+                    const c = getCenter(sorted[i]);
+                    moveTo(sorted[i], c.x, firstY + gap * i);
+                }
+                break;
+            }
+        }
+
+        this.redrawAll();
     }
 
     /**
