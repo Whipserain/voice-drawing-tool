@@ -867,6 +867,19 @@ class VoiceCommandParser {
             if (numMatch) size = parseInt(numMatch[1]);
         }
 
+        // 检测相对定位："在刚刚画的圆的左边"
+        const relMatch = text.match(/(?:刚刚|最后|刚才)(?:画|绘制|画的|画了)?(?:的|de)?(?:\w*?)(?:的|de)?(左边|右边|上面|下面|左上|右上|左下|右上)/);
+        if (relMatch) {
+            const relDir = relMatch[1];
+            return {
+                action: 'draw', shape, color, size,
+                region: 'center', // 先画在中间，后面可以通过 arrange 调整
+                relativeTo: 'last', // 标记为相对定位
+                relativeDir: relDir,
+                label: shapeLabel
+            };
+        }
+
         // 提取位置
         const region = this.findRegion(text);
 
