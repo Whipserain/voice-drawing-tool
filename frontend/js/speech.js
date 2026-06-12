@@ -566,7 +566,7 @@ class VoiceCommandParser {
     /**
      * 解析语音文本，返回命令数组
      */
-    parse(text) {
+    parse(text, currentColor) {
         if (!text || !text.trim()) return [];
 
         // 预处理
@@ -578,7 +578,7 @@ class VoiceCommandParser {
         const commands = [];
 
         for (const seg of segments) {
-            const cmd = this.parseSegment(seg);
+            const cmd = this.parseSegment(seg, currentColor);
             if (cmd) {
                 if (Array.isArray(cmd)) {
                     commands.push(...cmd);
@@ -650,7 +650,7 @@ class VoiceCommandParser {
     /**
      * 解析单个命令段
      */
-    parseSegment(text) {
+    parseSegment(text, currentColor) {
         if (!text || text.length < 2) return null;
 
         // 优先级从高到低
@@ -658,6 +658,7 @@ class VoiceCommandParser {
             || this.parseDeleteCommand(text)
             || this.parseDirection(text)
             || this.parseSizeAdjust(text)
+            || this.parseColorAdjustment(text, currentColor)
             || this.parseColorChange(text)
             || this.parseSceneCommand(text)
             || this.parseDrawCommand(text)
@@ -685,6 +686,25 @@ class VoiceCommandParser {
         if (/底部对齐|靠下/.test(text)) return { action: 'arrange', mode: 'align_bottom' };
         if (/水平分布|水平排列/.test(text)) return { action: 'arrange', mode: 'distribute_h' };
         if (/垂直分布|垂直排列/.test(text)) return { action: 'arrange', mode: 'distribute_v' };
+
+        // 视口控制：缩放
+        if (/放大画布|放大|拉近/.test(text)) return { action: 'viewport', mode: 'zoom_in' };
+        if (/缩小画布|缩小|拉远/.test(text)) return { action: 'viewport', mode: 'zoom_out' };
+
+        // 视口控制：复原
+        if (/复原|重置视图|恢复默认|原始大小/.test(text)) return { action: 'viewport', mode: 'reset' };
+
+        // 视口控制：平移（"看" + 区域，用"看"前缀区分绘制命令）
+        const panMatch = text.match(/^看(.+)$/);
+        if (panMatch) {
+            const regionKeyword = panMatch[1];
+            for (const [keyword, region] of this.regionEntries) {
+                if (regionKeyword === keyword || regionKeyword.includes(keyword)) {
+                    return { action: 'viewport', mode: 'pan', region };
+                }
+            }
+        }
+
         return null;
     }
 
@@ -968,6 +988,135 @@ class VoiceCommandParser {
     }
 
     /**
+     * 调整颜色
+     * @param {string} baseColor - 基础颜色 hex
+     * @param {Array} adjustments - 调整参数数组，如 [{type: 'darker'}, {type: 'more_blue'}]
+     * @returns {string} 调整后的 hex 颜色
+     */
+    adjustColor(baseColor, adjustments) {
+        let r = parseInt(baseColor.slice(1, 3), 16);
+        let g = parseInt(baseColor.slice(3, 5), 16);
+        let b = parseInt(baseColor.slice(5, 7), 16);
+
+        for (const adj of adjustments) {
+            switch (adj.type) {
+                case 'darker':
+                    r = Math.max(0, Math.round(r * 0.7));
+                    g = Math.max(0, Math.round(g * 0.7));
+                    b = Math.max(0, Math.round(b * 0.7));
+                    break;
+                case 'lighter':
+                    r = Math.min(255, Math.round(r + (255 - r) * 0.3));
+                    g = Math.min(255, Math.round(g + (255 - g) * 0.3));
+                    b = Math.min(255, Math.round(b + (255 - b) * 0.3));
+                    break;
+                case 'more_red':
+                    r = Math.min(255, r + 50);
+                    break;
+                case 'more_green':
+                    g = Math.min(255, g + 50);
+                    break;
+                case 'more_blue':
+                    b = Math.min(255, b + 50);
+                    break;
+                case 'more_yellow':
+                    r = Math.min(255, r + 40);
+                    g = Math.min(255, g + 40);
+                    break;
+            }
+        }
+
+        const toHex = (v) => v.toString(16).padStart(2, '0');
+        return '#' + toHex(r) + toHex(g) + toHex(b);
+    }
+
+    /**
+     * 解析颜色调整命令
+     * 匹配模式：「深一点的红色」「更蓝的绿色」「比刚才那个再蓝一点」
+     * @param {string} text - 预处理后的文本
+     * @param {string} currentColor - 当前使用的颜色 hex（用于相对调整）
+     * @returns {Object|null} 颜色命令对象
+     */
+    parseColorAdjustment(text, currentColor) {
+        // 如果文本包含形状关键词，交给 parseDrawCommand 处理
+        if (this.findShape(text)) return null;
+
+        let baseColor = null;
+        let remaining = '';
+
+        // 模式1：比刚才那个再蓝1点（相对当前颜色）
+        const relativeMatch = text.match(/比?(刚才|刚刚|之前)(那个)?再(红|蓝|绿|黄)1?点/);
+        if (relativeMatch && currentColor) {
+            const channelMap = { '红': 'more_red', '蓝': 'more_blue', '绿': 'more_green', '黄': 'more_yellow' };
+            return {
+                action: 'color',
+                color: this.adjustColor(currentColor, [{ type: channelMap[relativeMatch[3]] }]),
+                label: '更' + relativeMatch[3]
+            };
+        }
+
+        // 模式2：更红/更蓝/更绿/更黄 + 颜色（如"更蓝绿色"）
+        const channelAdjMatch = text.match(/更(红|蓝|绿|黄)(.*)/);
+        if (channelAdjMatch) {
+            const channelMap = { '红': 'more_red', '蓝': 'more_blue', '绿': 'more_green', '黄': 'more_yellow' };
+            remaining = channelAdjMatch[2].replace(/1?点|一些/g, '');
+            baseColor = this.findColor(remaining);
+            if (baseColor) {
+                return {
+                    action: 'color',
+                    color: this.adjustColor(baseColor.color, [{ type: channelMap[channelAdjMatch[1]] }]),
+                    label: '更' + channelAdjMatch[1] + baseColor.label
+                };
+            }
+        }
+
+        // 模式3：更深/更暗/更浅/更亮 + 颜色（如"更深红色"）
+        const brightAdjMatch = text.match(/更(深|暗|浅|亮)(.*)/);
+        if (brightAdjMatch) {
+            const type = (brightAdjMatch[1] === '深' || brightAdjMatch[1] === '暗') ? 'darker' : 'lighter';
+            remaining = brightAdjMatch[2].replace(/1?点|一些/g, '');
+            baseColor = this.findColor(remaining);
+            if (baseColor) {
+                return {
+                    action: 'color',
+                    color: this.adjustColor(baseColor.color, [{ type }]),
+                    label: brightAdjMatch[1] + baseColor.label
+                };
+            }
+        }
+
+        // 模式4：深/暗 + 1点 + 颜色（如"深1点红色"）
+        const darkMatch = text.match(/(深|暗)1?点(.*)/);
+        if (darkMatch) {
+            remaining = darkMatch[2].replace(/一些/g, '');
+            baseColor = this.findColor(remaining);
+            if (baseColor) {
+                return {
+                    action: 'color',
+                    color: this.adjustColor(baseColor.color, [{ type: 'darker' }]),
+                    label: darkMatch[1] + baseColor.label
+                };
+            }
+        }
+
+        // 模式5：浅/亮 + 1点 + 颜色（如"浅1点紫色"）
+        const lightMatch = text.match(/(浅|亮)1?点(.*)/);
+        if (lightMatch) {
+            remaining = lightMatch[2].replace(/一些/g, '');
+            baseColor = this.findColor(remaining);
+            if (baseColor) {
+                return {
+                    action: 'color',
+                    color: this.adjustColor(baseColor.color, [{ type: 'lighter' }]),
+                    label: lightMatch[1] + baseColor.label
+                };
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * 解析场景命令（如"画一个雪人"、"画一片星空"）
      */
     parseSceneCommand(text) {
@@ -1038,6 +1187,7 @@ class VoiceCommandParser {
             case 'clear': return '清除画布';
             case 'save': return '保存图片';
             case 'color': {
+                if (cmd.label) return `切换为${cmd.label}`;
                 const c = this.colorEntries.find(([k, v]) => v === cmd.color);
                 return `切换为${c ? c[0] : '新颜色'}`;
             }
@@ -1059,6 +1209,16 @@ class VoiceCommandParser {
                     distribute_h: '水平分布', distribute_v: '垂直分布',
                 };
                 return modeLabels[cmd.mode] || '排列';
+            }
+            case 'viewport': {
+                if (cmd.mode === 'zoom_in') return '放大画布';
+                if (cmd.mode === 'zoom_out') return '缩小画布';
+                if (cmd.mode === 'reset') return '重置视图';
+                if (cmd.mode === 'pan') {
+                    const rn = this.regionEntries.find(([k, v]) => v === cmd.region);
+                    return `查看${rn ? rn[0] : cmd.region}`;
+                }
+                return '视口操作';
             }
             default: return '执行命令';
         }
