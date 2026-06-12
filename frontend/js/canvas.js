@@ -244,6 +244,76 @@ class CanvasDrawingModule {
         }
     }
 
+    /**
+     * 绘制多色交替图案
+     * @param {string} shape - 形状类型（目前支持 circle）
+     * @param {string} region - 区域
+     * @param {string[]} colors - 颜色数组
+     * @param {number} size - 大小
+     * @param {number} segments - 总弧段数
+     */
+    drawPattern(shape, region, colors, size, segments) {
+        const coords = this.regionToCoords(region);
+        const s = size || this.shapeSize;
+        const r = s / 2;
+        const segCount = segments || colors.length * 2;
+
+        if (shape === 'circle' || shape === 'ellipse') {
+            // 绘制交替颜色的弧段
+            const angleStep = (Math.PI * 2) / segCount;
+
+            for (let i = 0; i < segCount; i++) {
+                const startAngle = i * angleStep - Math.PI / 2;
+                const endAngle = startAngle + angleStep;
+                const color = colors[i % colors.length];
+
+                this.ctx.save();
+                this.ctx.beginPath();
+                this.ctx.moveTo(coords.x, coords.y);
+                this.ctx.arc(coords.x, coords.y, r, startAngle, endAngle);
+                this.ctx.closePath();
+                this.ctx.fillStyle = color;
+                this.ctx.fill();
+                this.ctx.strokeStyle = '#000000';
+                this.ctx.lineWidth = this.brushSize;
+                this.ctx.stroke();
+                this.ctx.restore();
+            }
+        } else {
+            // 非圆形：按行列分块填充
+            const cols = Math.ceil(Math.sqrt(segCount));
+            const rows = Math.ceil(segCount / cols);
+            const cellW = s / cols;
+            const cellH = s / rows;
+            const startX = coords.x - s / 2;
+            const startY = coords.y - s / 2;
+
+            for (let i = 0; i < segCount; i++) {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                if (row >= rows) break;
+
+                this.ctx.save();
+                this.ctx.fillStyle = colors[i % colors.length];
+                this.ctx.fillRect(startX + col * cellW, startY + row * cellH, cellW, cellH);
+                this.ctx.strokeStyle = '#000000';
+                this.ctx.lineWidth = 1;
+                this.ctx.strokeRect(startX + col * cellW, startY + row * cellH, cellW, cellH);
+                this.ctx.restore();
+            }
+        }
+
+        // 记录形状
+        this.shapes.push({
+            type: 'pattern', shape, color: colors[0], size: s, region,
+            cx: coords.x, cy: coords.y,
+            colors, segments: segCount,
+            lineWidth: this.brushSize,
+        });
+
+        this.saveState();
+    }
+
     // 基础图形绘制方法
     drawCircle(cx, cy, r, fill) {
         this.ctx.beginPath();
@@ -669,6 +739,10 @@ class CanvasDrawingModule {
                 this.ctx.textBaseline = 'middle';
                 this.ctx.fillText(shape.content, shape.cx, shape.cy);
                 break;
+            case 'pattern':
+                this.ctx.restore(); // 恢复后再单独处理图案
+                this.drawPattern(shape.shape, shape.region, shape.colors, shape.size, shape.segments);
+                return; // drawPattern 已经处理了 save/restore
         }
 
         this.ctx.restore();
